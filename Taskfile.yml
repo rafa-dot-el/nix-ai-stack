@@ -249,7 +249,12 @@ tasks:
           TAG="$(gh api repos/NousResearch/hermes-agent/releases/latest --jq .tag_name)"
           : "${TAG:?could not resolve latest upstream release tag}"
         fi
-        perl -i -pe 's#(github:NousResearch/hermes-agent/)[^"]+#${1}'"${TAG}"'#' "$FLAKE"
+        # TAG travels in the environment, never spliced into the perl program text.
+        if ! [[ "$TAG" =~ ^v[0-9][0-9A-Za-z.]*$ ]]; then
+          echo "[-] TAG must look like vX.Y.Z, got: ${TAG}" >&2
+          exit 1
+        fi
+        TAG="$TAG" perl -i -pe 's#(github:NousResearch/hermes-agent/)[^"]+#$1$ENV{TAG}#' "$FLAKE"
         echo "update: pinned hermes-agent-src to ${TAG}"
       - task: update:flake-lock
       - task: check

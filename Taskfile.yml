@@ -211,20 +211,22 @@ tasks:
 
   check-update:
     desc: >-
-      Compare the pinned upstream tag (flake.nix hermes-agent-src.url) against
-      the newest calendar-versioned tag (vYYYY.M.D[.N]) on
-      NousResearch/hermes-agent. Exit 2 when an update is available.
+      Compare the pinned upstream tag (flake.nix hermes-agent-src url) against
+      the latest published release of NousResearch/hermes-agent. Exit 2 when
+      an update is available.
     dir: "{{.TASKFILE_DIR}}"
     silent: true
     cmds:
       - |
         set -euo pipefail
         FLAKE="{{.PKG_DIR}}/flake.nix"
-        PINNED="$(grep -m1 'hermes-agent-src.url' "$FLAKE" | sed -E 's#.*/hermes-agent/([^"]+)".*#\1#')"
-        LATEST="$(git ls-remote --tags --refs https://github.com/NousResearch/hermes-agent \
-          | sed -E 's#.*refs/tags/##' \
-          | grep -E '^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]+)?$' \
-          | sort -V | tail -1)"
+        PINNED="$(grep -m1 'github:NousResearch/hermes-agent/' "$FLAKE" | sed -E 's#.*github:NousResearch/hermes-agent/([^"]+)".*#\1#')"
+        : "${PINNED:?could not read pinned tag from flake.nix}"
+        # Upstream moved from calendar tags (vYYYY.M.D) to semver (v0.21.7), so
+        # `sort -V` over tag names would rank a stale calendar tag above a newer
+        # semver one. "Latest release" is ordered by publish date instead.
+        LATEST="$(gh api repos/NousResearch/hermes-agent/releases/latest --jq .tag_name)"
+        : "${LATEST:?could not resolve latest upstream release tag}"
         echo "check-update: pinned=${PINNED} latest=${LATEST}"
         if [ "$PINNED" != "$LATEST" ]; then
           echo "check-update: update available (${PINNED} -> ${LATEST})" >&2
@@ -233,8 +235,8 @@ tasks:
 
   update:
     desc: >-
-      Bump hermes-agent-src.url to the newest upstream tag, refresh
-      flake.lock, then check+build. Pass TAG=vYYYY.M.D to pin explicitly
+      Bump hermes-agent-src url to the latest upstream release, refresh
+      flake.lock, then check+build. Pass TAG=vX.Y.Z to pin explicitly
       instead of auto-detecting the latest.
     dir: "{{.TASKFILE_DIR}}"
     silent: true
@@ -244,10 +246,8 @@ tasks:
         FLAKE="{{.PKG_DIR}}/flake.nix"
         TAG="${TAG:-}"
         if [ -z "$TAG" ]; then
-          TAG="$(git ls-remote --tags --refs https://github.com/NousResearch/hermes-agent \
-            | sed -E 's#.*refs/tags/##' \
-            | grep -E '^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]+)?$' \
-            | sort -V | tail -1)"
+          TAG="$(gh api repos/NousResearch/hermes-agent/releases/latest --jq .tag_name)"
+          : "${TAG:?could not resolve latest upstream release tag}"
         fi
         perl -i -pe 's#(github:NousResearch/hermes-agent/)[^"]+#${1}'"${TAG}"'#' "$FLAKE"
         echo "update: pinned hermes-agent-src to ${TAG}"

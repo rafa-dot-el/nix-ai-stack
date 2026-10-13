@@ -38,6 +38,9 @@ let
       _hermes_cdp_url="$(${browserEnsureDebug}/bin/hermes-ensure-browser-debug --print-only 2>/dev/null)" || _hermes_cdp_url=""
       if [ -n "$_hermes_cdp_url" ]; then
         export BROWSER_CDP_URL="$_hermes_cdp_url"
+        # Marks BROWSER_CDP_URL as this wrapper's own default, so the lazy
+        # launch in browser.nix still runs and can make it live.
+        export HERMES_BROWSER_CDP_AUTO=1
       fi
     fi
   '';
@@ -73,7 +76,6 @@ let
       "fal"
       "feishu"
       "firecrawl"
-      "honcho"
       "modal"
       "parallel-web"
       "vercel"

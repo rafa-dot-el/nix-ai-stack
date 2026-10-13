@@ -153,10 +153,14 @@ let
   # real, first use. See browser-cdp.nix for what this backs off from and why
   # a bare launch can't rely on browser-harness's own discovery here.
   browserCdpAutoRun = ''
-    if [ -z "''${BROWSER_CDP_URL:-}" ] && [ -z "''${BU_CDP_URL:-}" ] && [ -z "''${BU_CDP_WS:-}" ]; then
+    # Launch unless an operator override is set. A BROWSER_CDP_URL that the
+    # top-level --run hook exported (HERMES_BROWSER_CDP_AUTO) is not one.
+    # browser-harness reads BU_CDP_URL, so export both or the launch is wasted.
+    if [ -z "''${BU_CDP_URL:-}" ] && [ -z "''${BU_CDP_WS:-}" ] \
+       && { [ -z "''${BROWSER_CDP_URL:-}" ] || [ -n "''${HERMES_BROWSER_CDP_AUTO:-}" ]; }; then
       _hermes_cdp_url="$(${browserEnsureDebug}/bin/hermes-ensure-browser-debug 2>/dev/null)" || _hermes_cdp_url=""
       if [ -n "$_hermes_cdp_url" ]; then
-        export BROWSER_CDP_URL="$_hermes_cdp_url"
+        export BROWSER_CDP_URL="$_hermes_cdp_url" BU_CDP_URL="$_hermes_cdp_url"
       fi
     fi
   '';

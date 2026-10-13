@@ -15,7 +15,7 @@
 # Rather than patch that pinned dependency, this sidesteps it: Hermes itself
 # already ships a first-class, higher-precedence override for exactly this —
 # BROWSER_CDP_URL env / browser.cdp_url in config.yaml (see
-# tools/browser_tool.py:_get_cdp_override and
+# tools/browser_tool_cdp.py:_get_cdp_override and
 # tools/browser_use_cli.py:_resolve_backend_cdp in hermes-agent's own
 # source, both of which translate it into BU_CDP_URL for browser-harness).
 # This script's only job is to make a Chromium from THIS flake actually
@@ -48,8 +48,11 @@ writeShellScriptBin "hermes-ensure-browser-debug" ''
 
   # An override already in effect anywhere — this process's own env, a live
   # `/browser connect`, or Browser Use's own BU_CDP_* vars — is authoritative;
-  # never second-guess it.
-  if [ -n "''${BROWSER_CDP_URL:-}" ] || [ -n "''${BU_CDP_URL:-}" ] || [ -n "''${BU_CDP_WS:-}" ]; then
+  # never second-guess it. The one exception is the URL that default.nix's
+  # --run hook exported itself (flagged by HERMES_BROWSER_CDP_AUTO): that is
+  # a default this script exists to make live, not an operator choice.
+  if [ -z "''${HERMES_BROWSER_CDP_AUTO:-}" ] \
+     && { [ -n "''${BROWSER_CDP_URL:-}" ] || [ -n "''${BU_CDP_URL:-}" ] || [ -n "''${BU_CDP_WS:-}" ]; }; then
     exit 0
   fi
 

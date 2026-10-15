@@ -21,29 +21,10 @@ let
   inherit (pkgs.callPackage ./browser.nix { inherit chromium; })
     browserUse agentBrowser cuaDriver buzzCli;
 
-  browserEnsureDebug = pkgs.callPackage ./browser-cdp.nix { inherit chromium; };
-
-  # Cheap, instant --run hook for every `hermes`/`hermes-agent`/`hermes-acp`
-  # launch: only computes and exports the CDP URL Hermes should aim at if it
-  # ever needs one — never probes or launches Chromium here. Hermes's own
-  # browser_exec resolution (tools/browser_use_cli.py:_resolve_backend_cdp)
-  # reads BROWSER_CDP_URL from THIS process's env, but only when the agent
-  # actually calls a browser tool, at which point it spawns the browser-use
-  # CLI as a fresh subprocess — THAT wrapper (browser.nix) is where the real
-  # probe-and-launch happens, lazily, exactly once per actual need. Doing the
-  # heavy work here instead would launch a whole Chromium on every `hermes`
-  # invocation, including ones that never touch a browser tool at all.
-  browserCdpAutoRun = ''
-    if [ -z "''${BROWSER_CDP_URL:-}" ] && [ -z "''${BU_CDP_URL:-}" ] && [ -z "''${BU_CDP_WS:-}" ]; then
-      _hermes_cdp_url="$(${browserEnsureDebug}/bin/hermes-ensure-browser-debug --print-only 2>/dev/null)" || _hermes_cdp_url=""
-      if [ -n "$_hermes_cdp_url" ]; then
-        export BROWSER_CDP_URL="$_hermes_cdp_url"
-        # Marks BROWSER_CDP_URL as this wrapper's own default, so the lazy
-        # launch in browser.nix still runs and can make it live.
-        export HERMES_BROWSER_CDP_AUTO=1
-      fi
-    fi
-  '';
+  # No --run hook: Hermes starts its own packaged Chromium on demand the first
+  # time browser_exec runs (tools/browser_use_cli.py:_resolve_managed_chromium_cdp,
+  # via agent-browser). Exporting a CDP URL here instead points Hermes at a
+  # Chromium nothing starts, and suppresses that on-demand launch.
 
   inherit (pkgs.callPackage ./voice.nix { inherit pkgsHermesRev; })
     hermes-voice-dependencies piperVoiceDir piperVoiceName
@@ -96,8 +77,7 @@ let
       ${old.postFixup or ""}
       for bin in hermes hermes-agent hermes-acp; do
         wrapProgram "$out/bin/$bin" \
-          --suffix PATH : "${lib.makeBinPath extraPathTools}" \
-          ${lib.optionalString withBrowser "--run ${lib.escapeShellArg browserCdpAutoRun}"}
+          --suffix PATH : "${lib.makeBinPath extraPathTools}"
       done
     ''
     # Baked into $out as actual build inputs, not just inert metadata.

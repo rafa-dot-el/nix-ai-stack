@@ -143,28 +143,6 @@ let
   browserUsePythonPath = lib.makeSearchPath python3Packages.python.sitePackages
     (python3Packages.requiredPythonModules browserUseDeps);
 
-  browserEnsureDebug = pkgs.callPackage ./browser-cdp.nix { inherit chromium; };
-
-  # The real, lazy auto-launch trigger: this binary is only ever spawned as a
-  # fresh subprocess when Hermes's browser_exec tool actually runs (see
-  # tools/browser_use_cli.py:_find_cli/_route_backend in hermes-agent's own
-  # source), never at `hermes` process start — so hanging the probe-and-launch
-  # here (full mode: no `--print-only`) means Chromium only ever starts on
-  # real, first use. See browser-cdp.nix for what this backs off from and why
-  # a bare launch can't rely on browser-harness's own discovery here.
-  browserCdpAutoRun = ''
-    # Launch unless an operator override is set. A BROWSER_CDP_URL that the
-    # top-level --run hook exported (HERMES_BROWSER_CDP_AUTO) is not one.
-    # browser-harness reads BU_CDP_URL, so export both or the launch is wasted.
-    if [ -z "''${BU_CDP_URL:-}" ] && [ -z "''${BU_CDP_WS:-}" ] \
-       && { [ -z "''${BROWSER_CDP_URL:-}" ] || [ -n "''${HERMES_BROWSER_CDP_AUTO:-}" ]; }; then
-      _hermes_cdp_url="$(${browserEnsureDebug}/bin/hermes-ensure-browser-debug 2>/dev/null)" || _hermes_cdp_url=""
-      if [ -n "$_hermes_cdp_url" ]; then
-        export BROWSER_CDP_URL="$_hermes_cdp_url" BU_CDP_URL="$_hermes_cdp_url"
-      fi
-    fi
-  '';
-
   browserUse = python3Packages.buildPythonApplication {
     pname = "browser-use";
     version = "0.13.8";
@@ -180,17 +158,6 @@ let
     makeWrapperArgs = [ "--set" "PYTHONPATH" browserUsePythonPath ];
     dontCheckRuntimeDeps = true;
     doCheck = false;
-    # A second, explicit wrapProgram pass, not folded into makeWrapperArgs
-    # above: buildPythonApplication's own wrap-python-hook builds its
-    # wrapper via unquoted word-splitting internally, which chokes
-    # ("array assign: ... syntax error near unexpected token `&&'") on a
-    # multi-line --run script containing shell metacharacters. A plain
-    # postFixup wrapProgram call (same pattern as hermes/hermes-agent/
-    # hermes-acp in default.nix, and agent-browser below) re-wraps the
-    # already-wrapped binary safely instead.
-    postFixup = ''
-      wrapProgram "$out/bin/browser-use" --run ${lib.escapeShellArg browserCdpAutoRun}
-    '';
   };
 
   # buzz CLI is a Rust binary from block/buzz monorepo used by buzz/adapter.py.

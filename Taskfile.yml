@@ -99,6 +99,24 @@ tasks:
         out="$(nix build --no-link --print-out-paths .#hermes-desktop)"
         exec "$out/bin/hermes-desktop" {{.CLI_ARGS}}
 
+  test:unit:
+    desc: "Unit tests for the mock OpenAI backend (pure Python, no nix build, no network)"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - nix develop .#itest -c pytest tests/integration/test_mock_openai.py -v {{.CLI_ARGS}}
+
+  test:integration:
+    desc: "Run hermes-acp against the mock OpenAI backend (browser_exec drives a headless Chromium)"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        HERMES_OUT="$(nix build .#default --no-link --print-out-paths)"
+        export HERMES_OUT
+        nix develop .#itest -c pytest tests/integration -v {{.CLI_ARGS}}
+
   test:
     desc: "Run passthru.tests if defined, else build the package itself"
     dir: "{{.TASKFILE_DIR}}"

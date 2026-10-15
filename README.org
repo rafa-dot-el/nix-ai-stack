@@ -212,30 +212,32 @@ The CLI has two browser backends:
 - *browser-use*: Autonomous agent-driven browser control (=browser_exec=, the default backend — active whenever the =browser-use= CLI is on PATH, which it always is in this package)
 - *agent-browser*: Built-in browser toolset for hermes_agent (CDP-driven)
 
-Both need a Chromium actually listening for CDP, which is where upstream's
-own auto-detection falls short on a fresh machine: =browser-harness=
-(browser-use's local-Chrome discovery, pinned in [[file:browser.nix][browser.nix]]) only
-recognizes a browser holding one of a few standard profile dirs
-(=~/.config/{google-chrome,chromium,microsoft-edge}=) — a Chromium on any
-other =--user-data-dir= is invisible to it, and plain Chromium has no "Allow
-remote debugging?" toggle for it to fall back to either.
+Hermes starts its own Chromium on demand: the first =browser_exec= call of a
+session launches the packaged Chromium through =agent-browser= (upstream's
+=_resolve_managed_chromium_cdp=). Nothing has to be running beforehand, and
+nothing starts at =hermes= startup. The packaged Chromium runs headless, so it
+needs no display.
 
-Rather than patch that pinned dependency, [[file:browser-cdp.nix][browser-cdp.nix]] wraps
-=hermes=/=hermes-agent=/=hermes-acp= with a preflight that ensures a Chromium
-from this flake is listening on a dedicated, persistent profile and exports
-=BROWSER_CDP_URL= — Hermes's own first-class override for this
-(=browser.cdp_url= in config.yaml is the persistent equivalent), which both
-backends already honor ahead of any local-Chrome discovery. It backs off
-completely if a CDP endpoint is already configured (env or config.yaml), so
-it never overrides an explicit choice.
+A CDP endpoint configured by the operator (=BROWSER_CDP_URL=, =BU_CDP_URL=,
+=BU_CDP_WS=, or =browser.cdp_url= in config.yaml) takes precedence and is used
+as-is; Hermes does not launch anything in that case.
 
-Defaults: port =9222=, profile dir =$HERMES_HOME/chrome-debug= (matching
-upstream's own =chrome_debug_data_dir()= convention) — already distinct per
-profile, since each profile sets its own =HERMES_HOME= (see
-=services.hermes-agent.hermesHome= above, or a multi-profile CLI setup).
-Override either independently with =HERMES_BROWSER_DEBUG_PORT= /
-=HERMES_BROWSER_DEBUG_DIR= when a profile needs its own regardless of
-=HERMES_HOME=.
+** Integration tests
+
+=tests/integration= drives =hermes-acp= (the ACP front door an editor uses)
+against a scripted fake of the OpenAI Chat Completions API, so the model's
+turns are fixed and the assertions are on what Hermes sent the backend and on
+the browser it actually drove.
+
+#+begin_src bash
+task test:unit          # the fake backend itself: pure Python, no nix build
+task test:integration   # builds the package, then runs everything (needs network for the Cat test)
+task test:integration -- -m "not network"   # offline subset
+#+end_src
+
+Each test gets its own profile, HOME, TMPDIR and agent-browser/browser-harness
+runtime dirs under =/tmp/hi-*=, and tears down what it started. Set
+=HERMES_IT_KEEP_SESSIONS=1= to keep those directories after a run for debugging.
 
 ** Wake word (sherpa)
 
@@ -363,26 +365,20 @@ If missing, verify Hermes is installed correctly and Nix cache is working.
 
 ** Browser automation not working
 
-First check whether the auto-launched debug Chromium ever came up:
+Check the agent log for the browser session that =browser_exec= creates:
 
 #+begin_src bash
-echo "${HERMES_HOME:-$HOME/.hermes}/chrome-debug/DevToolsActivePort"
-cat "${HERMES_HOME:-$HOME/.hermes}/chrome-debug/DevToolsActivePort"
+grep -E "Created local browser session|browser_exec" "${HERMES_HOME:-$HOME/.hermes}/logs/agent.log" | tail -5
 #+end_src
 
-No such file: the preflight ([[file:browser-cdp.nix][browser-cdp.nix]]) couldn't launch Chromium (no
-display, sandboxing, disk full, …) — run it directly to see why:
+If the session never starts, the =browser_exec= result carries the failure
+from browser-harness or agent-browser in its =stderr=.
 
-#+begin_src bash
-hermes-ensure-browser-debug
-#+end_src
+A CDP endpoint configured through =BROWSER_CDP_URL=/=BU_CDP_URL=/=BU_CDP_WS=
+or =browser.cdp_url= in config.yaml is used instead of the packaged Chromium,
+so if one is set, check that it is reachable.
 
-A CDP endpoint already configured (=BROWSER_CDP_URL=/=BU_CDP_URL=/=BU_CDP_WS=
-env, or =browser.cdp_url= in config.yaml) makes the preflight back off
-entirely — that endpoint is then on you to keep reachable.
-
-Ensure Chromium itself is on PATH (used directly by =agent-browser= and by
-the preflight):
+Ensure Chromium itself is on PATH:
 
 #+begin_src bash
 which chromium

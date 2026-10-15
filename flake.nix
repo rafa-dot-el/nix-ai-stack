@@ -84,6 +84,11 @@
         default = pkgs.mkShell {
           packages = [ pkgs.go-task pkgs.jq ];
         };
+        # Integration test runner: pytest from the locked nixpkgs, nothing
+        # installed with pip/uv (see tests/integration).
+        itest = pkgs.mkShell {
+          packages = [ (pkgs.python3.withPackages (ps: [ ps.pytest ps.pytest-cov ])) ];
+        };
       });
     };
 }

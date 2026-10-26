@@ -3,7 +3,7 @@
 # Piper activation: config.yaml { tts: { provider: piper, piper: { voice: <passthru.piperVoicePath> } } }
 #
 { lib, stdenv, makeWrapper, chromium, hermes, pkgsHermesRev
-, pyright, nodePackages, gopls, rust-analyzer, nixd, clang-tools, xclip, xsel, pkgs
+, pyright, typescript-language-server, gopls, rust-analyzer, nixd, clang-tools, xclip, xsel, pkgs
 # Feature toggles — a service (NixOS module) that doesn't need every extra
 # builds a smaller closure via these instead of always getting hermesFull's
 # everything. Each maps to real pyproject.toml dependency groups (verified
@@ -55,7 +55,7 @@ let
     lib.optionals withBrowser [ chromium browserUse buzzCli cuaDriver agentBrowser ]
     ++ lib.optionals withLsp [
       pyright
-      nodePackages.typescript-language-server
+      typescript-language-server
       gopls
       rust-analyzer
       nixd

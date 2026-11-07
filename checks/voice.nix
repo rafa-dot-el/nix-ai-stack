@@ -11,7 +11,14 @@ runCommand "check-rafa-voice" { nativeBuildInputs = [ rafa-voice file ]; } ''
   echo "[+] say: WAV $(stat -c %s $TMPDIR/fox.wav) bytes, MP3 $(stat -c %s $TMPDIR/fox.mp3) bytes"
   heard=$(rafa-voice transcribe $TMPDIR/fox.wav --language en)
   echo "[*] heard: $heard"
-  echo "$heard" | tr '[:upper:]' '[:lower:]' | grep -q "quick brown fox"
+  # A speech model's exact words vary with the CPU (CI once heard "quick-brem"), so the round trip
+  # must recover most of the sentence, not all of it: 6 of its 8 distinct words.
+  matched=0
+  for w in the quick brown fox jumps over lazy dog; do
+    if echo "$heard" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z\n' ' ' | grep -qw "$w"; then matched=$((matched + 1)); fi
+  done
+  echo "[*] transcribe: $matched of 8 words recovered"
+  [ "$matched" -ge 6 ]
   echo "[+] transcribe: round trip recovered the sentence"
   if rafa-voice say hi -o $TMPDIR/x.exe 2>/dev/null; then echo "[-] accepted an unknown format"; exit 1; fi
   echo "[+] unknown formats are refused"

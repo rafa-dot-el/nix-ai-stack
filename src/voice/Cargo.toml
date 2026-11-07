@@ -1,0 +1,22 @@
+[package]
+name = "voice"
+description = "rafa-voice: the stack's one TTS (Piper) and STT (faster-whisper) CLI"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "rafa-voice"
+path = "src/main.rs"
+
+[dependencies]
+rafa-config = { path = "../rafa-config" }
+thiserror.workspace = true
+
+
+[dev-dependencies]
+tempfile = "3"

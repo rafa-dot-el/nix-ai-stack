@@ -1,0 +1,53 @@
+version: "3"
+
+silent: true
+
+# Included from the root Taskfile as pkg:antigravity-cli; builds through the root flake.
+vars:
+  DEF: "{{.TASKFILE_DIR}}/default.nix"
+  ATTR: "{{.ROOT_DIR}}#antigravity-cli"
+  MANIFEST_URL: "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json"
+
+tasks:
+  build:
+    desc: "Build antigravity-cli"
+    cmds:
+      - nix build "{{.ATTR}}" --no-link
+
+  test:
+    desc: "Build antigravity-cli's smoke test (passthru.tests.smoke)"
+    cmds:
+      - nix build "{{.ATTR}}.passthru.tests.smoke" --no-link
+
+  check-update:
+    desc: "Exit 0 if the release manifest has a newer version; exit 1 if current; exit 2 on errors"
+    cmds:
+      - |
+        set -euo pipefail
+        LOCAL="$(grep -m1 '^  version = ' "{{.DEF}}" | sed -E 's/^  version = "([^"]*)";$/\1/')"
+        REMOTE="$(curl -fsSL "{{.MANIFEST_URL}}" | jq -r '.version')"
+        if [ -z "$REMOTE" ] || [ "$REMOTE" = "null" ] || [ -z "$LOCAL" ]; then
+          echo "[-] check-update: could not read versions (local='$LOCAL' remote='$REMOTE')" >&2; exit 2
+        fi
+        if [ "$REMOTE" = "$LOCAL" ]; then echo "[*] check-update: antigravity-cli up to date ($LOCAL)"; exit 1; fi
+        echo "[*] check-update: antigravity-cli $LOCAL -> $REMOTE"
+
+  update:
+    desc: "Bump to the manifest's version: prefetch the tarball, patch default.nix, build, test"
+    cmds:
+      - |
+        set -euo pipefail
+        MANIFEST="$(curl -fsSL "{{.MANIFEST_URL}}")"
+        V="$(echo "$MANIFEST" | jq -r '.version')"
+        U="$(echo "$MANIFEST" | jq -r '.url')"
+        [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "[-] update: unexpected version '$V'" >&2; exit 2; }
+        [[ "$U" =~ ^https://storage\.googleapis\.com/antigravity-public/antigravity-cli/[0-9A-Za-z.-]+/linux-x64/cli_linux_x64\.tar\.gz$ ]] \
+          || { echo "[-] update: unexpected URL '$U'" >&2; exit 2; }
+        H="$(nix store prefetch-file --json "$U" | jq -r .hash)"
+        # Values travel in the environment, never spliced into the perl program text.
+        V="$V" perl -i -pe 's/^  version = "[^"]*";/  version = "$ENV{V}";/' "{{.DEF}}"
+        U="$U" perl -i -pe 's|^    url = "[^"]*";|    url = "$ENV{U}";|' "{{.DEF}}"
+        H="$H" perl -i -pe 's|^    hash = "sha256[^"]*";|    hash = "$ENV{H}";|' "{{.DEF}}"
+        echo "[+] update: antigravity-cli $V ($H)"
+      - task: build
+      - task: test

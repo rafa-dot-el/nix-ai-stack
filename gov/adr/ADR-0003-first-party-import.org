@@ -1,0 +1,26 @@
+#+title: ADR-0003 First-party code is imported with fresh history
+:PROPERTIES:
+:STATUS:        Proposed
+:DATE:          2026-10-31
+:SUPERSEDES:
+:SUPERSEDED_BY:
+:REQUIREMENTS:  NFR-SEC.P04
+:COMMITS:
+:END:
+
+* Context
+The first-party projects to import (mcp-proxy, mcp-slack, slack-send-draft, gsuite, tmpmail, claude-usage, calibrectl, zoteroctl) live in the author's NixOS configuration monorepo. Their history and sources carry identity and environment details (an unsuitable author email, names, channel and workspace identifiers, internal module paths, a hardcoded UID) that must not be published, and this repository is mirrored publicly on GitHub.
+
+* Decision
+Copy each project as a new commit (no history), delete junk (scratchpad logs, test-result archives, =target/=), and remove personal and work identifiers before the first commit, checked by review of each import diff.
+
+* Change
+#+begin_src text
+src/<project>/   new commit per project, no imported history
+#+end_src
+
+* Alternatives
+- =git subtree split= + =filter-repo= mailmap: keeps history, but one missed rewrite leaks the email publicly and permanently; rejected.
+
+* Consequences
+- History of these projects stays only in the author's NixOS configuration repository until decommission.

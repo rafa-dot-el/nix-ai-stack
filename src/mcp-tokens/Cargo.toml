@@ -1,0 +1,11 @@
+[package]
+name = "mcp-tokens"
+description = "Token estimates for MCP tool definitions and the savings a filter gives"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+tiktoken-rs.workspace = true

@@ -1,0 +1,49 @@
+#+title: Requirements — nix-ai-stack
+#+date: <2026-10-31>
+#+filetags: :requirements:governance:
+
+* Functional requirements
+
+** FR01 Package the AI stack
+- FR01.1 Every package in the plan's inventory (agents, tools, MCP servers, runtimes) builds from a locked flake as =packages.<system>.<name>=.
+  Measure: =nix build= of each attribute succeeds in CI.
+- FR01.2 Hermes stays available in its existing variants (=default=, =hermes-slim=, desktop, OCI image).
+  Measure: the existing attribute names still evaluate.
+
+** FR02 Deliver through modules
+- FR02.1 Home Manager and NixOS modules expose one option tree under =rafa.ai=; one root switch per agent enables its default stack; services are never implied by a root switch.
+  Measure: module eval tests render the expected files and units for each root switch.
+
+** FR03 One MCP entry point for agents
+- FR03.1 Agents reach every MCP server through =mcp client= over stdio; servers run as their own user services and are discovered by =mcp proxy= without being listed.
+  Measure: VM test =vm-mcp-stack=.
+- FR03.2 Tools can be included, excluded (hidden), renamed and re-described on the proxy side and on the client side, with collisions rejected at load time.
+  Measure: =mcp-filter= unit tests (>95% coverage) and proxy integration tests.
+
+** FR04 Keep Hermes working
+- FR04.1 Hermes browser automation works and its failure modes reach the model as tool results.
+  Measure: =tests/integration= (offline subset) green in CI.
+
+* Non-functional requirements
+
+** NFR-SEC
+- NFR-SEC.P01 No self-update and no telemetry: every packaged tool ships with update checks and telemetry disabled where a switch exists; what cannot be disabled is documented.
+  Measure: =checks.hardening= (eval, wrapper grep, startup connect probe).
+- NFR-SEC.P02 Supply chain: every dependency is locked to a hash; one nixpkgs per channel; no runtime =npx=/=uvx=/=pip= installs by default.
+  Measure: =task check:inputs=; hardening probe.
+- NFR-SEC.P03 No secrets in the Nix store or in units; secrets come from files (=LoadCredential=) or commands resolved at runtime.
+  Measure: module eval test asserts no secret value appears in rendered units.
+- NFR-SEC.P04 The public mirror carries no personal or employer data.
+  Measure: review of each import diff before commit.
+
+** NFR-QUAL
+- NFR-QUAL.01 Pure functions have >95% test coverage; every bug fix starts with a failing test.
+  Measure: coverage reports in =checks=; RED evidence in the journal.
+
+** NFR-OPS
+- NFR-OPS.01 Every MCP server logs to its own journal identifier and restarts on failure.
+  Measure: =vm-mcp-stack= kills a server and observes restart and reconnect.
+
+* Constraints
+- C-01 Nix flakes, Taskfile as the only entry point, GPL-3.0 for first-party code.
+- C-02 CI runs on GitHub Actions; a private GitLab instance is the primary repository and runs no CI.

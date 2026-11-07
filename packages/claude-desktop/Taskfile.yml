@@ -1,0 +1,49 @@
+version: "3"
+
+silent: true
+
+# Included from the root Taskfile as pkg:claude-desktop; builds through the root flake.
+vars:
+  DEF: "{{.TASKFILE_DIR}}/default.nix"
+  ATTR: "{{.ROOT_DIR}}#claude-desktop"
+  APT_PACKAGES_URL: "https://downloads.claude.ai/claude-desktop/apt/stable/dists/stable/main/binary-amd64/Packages"
+  POOL_BASE: "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop"
+
+tasks:
+  build:
+    desc: "Build claude-desktop and its FHS variant"
+    cmds:
+      - nix build "{{.ATTR}}" "{{.ROOT_DIR}}#claude-desktop-fhs" --no-link
+
+  test:
+    desc: "Build claude-desktop's smoke and hardening checks"
+    cmds:
+      - nix build "{{.ROOT_DIR}}#checks.x86_64-linux.claude-desktop-smoke" "{{.ROOT_DIR}}#checks.x86_64-linux.claude-desktop-hardening" --no-link
+
+  check-update:
+    desc: "Exit 0 if the apt repository has a newer amd64 release; exit 1 if current; exit 2 on errors"
+    cmds:
+      - |
+        set -euo pipefail
+        LOCAL="$(grep -m1 '^  version = ' "{{.DEF}}" | sed -E 's/^  version = "([^"]*)";$/\1/')"
+        REMOTE="$(curl -fsSL '{{.APT_PACKAGES_URL}}' | grep '^Version: ' | sed -E 's/^Version: //' | sort -V | tail -n1)"
+        if [ -z "$LOCAL" ] || [ -z "$REMOTE" ]; then
+          echo "[-] check-update: could not read versions (local='$LOCAL' remote='$REMOTE')" >&2; exit 2
+        fi
+        if [ "$REMOTE" = "$LOCAL" ]; then echo "[*] check-update: claude-desktop up to date ($LOCAL)"; exit 1; fi
+        echo "[*] check-update: claude-desktop $LOCAL -> $REMOTE"
+
+  update:
+    desc: "Bump to the newest apt release: prefetch the .deb, patch default.nix, build both variants, test"
+    cmds:
+      - |
+        set -euo pipefail
+        V="${VERSION:-$(curl -fsSL '{{.APT_PACKAGES_URL}}' | grep '^Version: ' | sed -E 's/^Version: //' | sort -V | tail -n1)}"
+        [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "[-] update: unexpected version '$V'" >&2; exit 2; }
+        H="$(nix store prefetch-file --json "{{.POOL_BASE}}/claude-desktop_${V}_amd64.deb" | jq -r .hash)"
+        # Values travel in the environment, never spliced into the perl program text.
+        V="$V" perl -i -pe 's/^  version = "[^"]*";/  version = "$ENV{V}";/' "{{.DEF}}"
+        H="$H" perl -i -pe 's|^    hash = "sha256[^"]*";|    hash = "$ENV{H}";|' "{{.DEF}}"
+        echo "[+] update: claude-desktop $V ($H)"
+      - task: build
+      - task: test

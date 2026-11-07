@@ -1,0 +1,108 @@
+#+title: zoteroctl
+#+author: Rafael
+
+* Purpose
+
+Command-line tool for managing a Zotero library through direct SQLite access and the Zotero
+translation server. Supports importing, querying, exporting, and diagnostics without requiring the
+Zotero desktop application to be running.
+
+* Environment Variables
+
+| Variable                    | Default                      | Description                    |
+|-----------------------------+------------------------------+--------------------------------|
+| ~ZOTERO_DATABASE~           | ~~/Zotero/zotero.sqlite~     | Path to Zotero SQLite database |
+| ~ZOTERO_STORAGE~            | ~~/Zotero/storage~           | Path to attachment storage dir |
+| ~ZOTERO_TRANSLATION_SERVER~ | ~http://localhost:1969~      | Translation server URL         |
+
+* Usage
+
+#+begin_src shell
+# Check database health
+zoteroctl doctor
+zoteroctl --json-output doctor
+
+# Get a single item
+zoteroctl get ABCD1234
+
+# List items
+zoteroctl list-items
+zoteroctl list-items --collection COLL1234 --limit 50
+zoteroctl list-items --tag security
+
+# Query with SQL WHERE clause
+zoteroctl query "it.typeName='book'"
+zoteroctl query "c.lastName='Doe'"
+
+# Create / update items
+zoteroctl create item.yaml
+zoteroctl update item.yaml
+
+# Import from URL via translation server
+zoteroctl add --from-url https://arxiv.org/abs/2301.12345
+
+# Export to BibTeX
+zoteroctl export ABCD1234
+zoteroctl export --all --output library.bib
+zoteroctl export --collection COLL1234 --output section.bib
+
+# Convert BibTeX to YAML
+zoteroctl bibtex-to-yaml references.bib
+
+# File attachments
+zoteroctl add-file ABCD1234 paper.pdf
+zoteroctl list-files ABCD1234
+zoteroctl delete-file EFGH5678
+
+# Collections
+zoteroctl list-collections
+zoteroctl list-collections --json
+zoteroctl create-collection "My Research"
+zoteroctl create-collection "Subtopic" --parent "My Research"
+zoteroctl add-to-collection ABCD1234 COLL5678
+zoteroctl remove-from-collection ABCD1234 COLL5678
+#+end_src
+
+* Development Workflow
+
+#+begin_src shell
+# Install dependencies
+task deps
+
+# Run tests
+task test
+
+# Lint and type-check
+task lint
+task type-check
+
+# Run everything
+task all
+
+# Build Nix package
+task build
+
+# Enter dev shell
+task dev
+#+end_src
+
+* Project Structure
+
+#+begin_example
+zoteroctl/
+├── zoteroctl/
+│   ├── __init__.py       version string
+│   ├── __main__.py       python -m zoteroctl entry point
+│   ├── cli.py            Click command group and all subcommands
+│   ├── config.py         environment variable helpers
+│   ├── db.py             database connection and schema utilities
+│   ├── formatters.py     YAML/JSON output and echo helpers
+│   ├── validation.py     pure validation functions
+│   ├── bibtex.py         BibTeX conversion (pure functions)
+│   ├── attachments.py    file attachment CRUD
+│   ├── collections.py    collection CRUD
+│   ├── translation.py    HTTP client for translation server
+│   └── doctor.py         diagnostic check logic
+└── tests/
+    └── ...               pytest test suite
+#+end_example

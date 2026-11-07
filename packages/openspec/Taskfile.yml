@@ -1,0 +1,52 @@
+version: "3"
+
+silent: true
+
+# Included from the root Taskfile as pkg:openspec; builds through the root flake.
+vars:
+  DEF: "{{.TASKFILE_DIR}}/default.nix"
+  ATTR: "{{.ROOT_DIR}}#openspec"
+  REPO: Fission-AI/OpenSpec
+
+tasks:
+  build:
+    desc: "Build openspec"
+    cmds:
+      - nix build "{{.ATTR}}" --no-link
+
+  test:
+    desc: "Build openspec's smoke test (passthru.tests.smoke)"
+    cmds:
+      - nix build "{{.ATTR}}.passthru.tests.smoke" --no-link
+
+  check-update:
+    desc: "Exit 0 if GitHub has a newer release; exit 1 if current; exit 2 on errors"
+    cmds:
+      - |
+        set -euo pipefail
+        LOCAL="$(grep -m1 '^  version = ' "{{.DEF}}" | sed -E 's/^  version = "([^"]*)";$/\1/')"
+        REMOTE="$(gh api "repos/{{.REPO}}/releases/latest" --jq '.tag_name | ltrimstr("v")')"
+        if [ -z "$REMOTE" ] || [ -z "$LOCAL" ]; then
+          echo "[-] check-update: could not read versions (local='$LOCAL' remote='$REMOTE')" >&2; exit 2
+        fi
+        if [ "$REMOTE" = "$LOCAL" ]; then echo "[*] check-update: openspec up to date ($LOCAL)"; exit 1; fi
+        echo "[*] check-update: openspec $LOCAL -> $REMOTE"
+
+  update:
+    desc: "Bump to the latest release: source hash, then the pnpm deps hash from the failed build, then build and test"
+    cmds:
+      - |
+        set -euo pipefail
+        V="${VERSION:-$(gh api "repos/{{.REPO}}/releases/latest" --jq '.tag_name | ltrimstr("v")')}"
+        [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "[-] update: unexpected version '$V'" >&2; exit 2; }
+        H="$(nix store prefetch-file --unpack --json "https://github.com/{{.REPO}}/archive/refs/tags/v$V.tar.gz" | jq -r .hash)"
+        V="$V" perl -i -pe 's/^  version = "[^"]*";/  version = "$ENV{V}";/' "{{.DEF}}"
+        # The source hash is the first `hash =` (fetchFromGitHub), the pnpm one follows.
+        H="$H" perl -0 -i -pe 's|(src = fetchFromGitHub \{.*?\n\s*hash = )"[^"]*";|$1"$ENV{H}";|s' "{{.DEF}}"
+        perl -0 -i -pe 's|(pnpmDeps = .*?\n\s*hash = )"[^"]*";|$1"";|s' "{{.DEF}}"
+        D="$(nix build "{{.ATTR}}" --no-link 2>&1 | grep -oE 'got: +sha256-[A-Za-z0-9+/=]+' | awk '{print $2}' | head -1 || true)"
+        [ -n "$D" ] || { echo "[-] update: could not read the pnpm dependency hash" >&2; exit 2; }
+        D="$D" perl -0 -i -pe 's|(pnpmDeps = .*?\n\s*hash = )"";|$1"$ENV{D}";|s' "{{.DEF}}"
+        echo "[+] update: openspec $V (src $H, pnpm $D)"
+      - task: build
+      - task: test

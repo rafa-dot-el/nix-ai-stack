@@ -1,0 +1,171 @@
+#+Title: likec4 (isolated sub-flake)
+
+Pinned [[https://likec4.dev][LikeC4]] (architecture as code, C4 model), packaged complete: CLI,
+MCP server, guardrail test runner, Emacs mode, and Playwright browsers from
+nixpkgs. No runtime downloads.
+
+* Layout
+
+#+begin_example
+packages/likec4/
+├── default.nix         # buildNpmPackage + Vite cacheDir patch + passthru.tests.smoke
+├── flake.nix           # packages.{likec4,default}, checks.smoke
+├── package.json        # likec4, vitest, playwright overrides (= nixpkgs playwright-driver)
+├── package-lock.json
+├── Taskfile.yml        # check lint build test lock update check-update cache:push
+├── bin/
+│   ├── likec4.sh         # CLI wrapper: every guard lives here
+│   ├── likec4-mcp.sh     # MCP server over stdio (--repo PATH: git-root relative)
+│   ├── claude-mcp-install-likec4.sh  # register it in <repo>/.mcp.json
+│   ├── hermes-mcp-install-likec4.py  # register it in a Hermes profile
+│   ├── likec4-validate-hook.sh  # Claude Code PostToolUse: validate after .c4 edits
+│   └── likec4-vitest.sh  # guardrail runner, no npm install in the project
+├── emacs/likec4-mode.el  # major mode + LSP (eglot, lsp-mode)
+└── tests/fixture/        # model exercised by the smoke test
+#+end_example
+
+* Outputs
+
+| Path                                    | Purpose                                              |
+|-----------------------------------------+------------------------------------------------------|
+| =bin/likec4=                            | CLI (validate, build, start, export, gen, lsp, mcp)  |
+| =bin/likec4-mcp [workspace]=            | =likec4 mcp --stdio --no-watch=, for =.mcp.json=     |
+| =bin/likec4-mcp --repo PATH=            | same, PATH relative to the git root of the cwd       |
+| =bin/claude-mcp-install-likec4=         | project-scoped Claude MCP entry (see below)          |
+| =bin/hermes-mcp-install-likec4=         | profile-scoped Hermes MCP entry (see below)          |
+| =bin/likec4-vitest=                     | vitest + =likec4/model= pinned; symlinked node_modules |
+| =bin/likec4-validate-hook=              | Claude Code PostToolUse hook (see below)             |
+| =share/emacs/site-lisp/likec4-mode.el= | =.c4= / =.likec4= files, LSP = this package's binary  |
+
+* Registering the MCP server in a project
+
+Run once from the directory that holds the model (e.g. a project's =gov/=).
+Deliberately not a Taskfile task: each task is exposed as a Taskfile MCP tool,
+and a one-off setup step does not belong in every session's tool list.
+
+#+begin_src bash :eval no
+claude-mcp-install-likec4                       # <repo>/.mcp.json, commit it
+hermes-mcp-install-likec4 --profile architecture
+#+end_src
+
+| Tool   | Scope            | Writes                                                          |
+|--------+------------------+-----------------------------------------------------------------|
+| Claude | project          | =<repo>/.mcp.json=: =likec4-mcp --repo <path from repo root>=   |
+| Hermes | profile (only)   | =mcp_servers.likec4= in the profile =config.yaml=, =${HOME}/...= |
+
+- Both refuse (exit 66) a directory with no =likec4.config.*= within 3
+  levels, merge into existing config, and are idempotent. =--name= changes the
+  server key (two models in one profile).
+- Claude: =--repo= makes the committed entry independent of the machine and
+  of the subdirectory Claude was started in. Claude asks to approve a new
+  project server on its next start.
+- Hermes 0.21.0 has no project-scoped MCP config (=hermes project= is session
+  grouping, not config), so the entry goes into a profile. The profile file
+  is tracked, so the edit must be additions only: a ruamel.yaml round-trip
+  in the style (line width, null spelling) that reproduces the file byte for
+  byte, refused (exit 65) when no style does or when any line outside the
+  replaced entry would change. =hermes mcp add= and yq-go both reformat it
+  (blank lines, wrapped values). =${HOME}= is expanded by Hermes (=_expand_env_vars=), so the tracked
+  harness config is valid on every host. Verify:
+  =hermes -p <profile> mcp test likec4=.
+
+* Claude Code hook
+
+=likec4-validate-hook= reads the PostToolUse JSON on stdin. For an edited
+=*.c4= / =*.likec4= file it finds the workspace (nearest project, widened to
+the parent when a sibling directory is another project, or the first
+ancestor with a project child for config-less dirs like =shared/=; stops at
+the git root or =$HOME=) and runs =likec4 validate --no-layout= on it. About
+1.2 s on the estate model. Invalid: exit 2 with the error lines on stderr,
+which Claude receives. Layout drift stays with =task check=.
+
+Registered in =harness/claude/settings.json= (guarded, so it is a no-op on a
+host without this package):
+
+#+begin_src json :eval no
+"PostToolUse": [{ "matcher": "Edit|MultiEdit|Write",
+  "hooks": [{ "type": "command", "timeout": 60,
+    "command": "command -v likec4-validate-hook >/dev/null && exec likec4-validate-hook; exit 0" }] }]
+#+end_src
+
+Permissions in the same file: allow =Bash(likec4:*)=, =Bash(likec4-vitest:*)=,
+=Bash(claude-mcp-install-likec4:*)=, =mcp__likec4=; ask
+=mcp__likec4__apply-semantic-layout= (it writes layout snapshots); deny
+=Bash(likec4 publish:*)=, =Bash(npx likec4:*)= (the fourth layer of the
+publish guard).
+
+* Guards
+
+All guards live in =bin/likec4.sh=, so no project Taskfile has to remember them.
+
+** =likec4 publish= is refused (exit 64)
+
+=publish= uploads the model to LikeC4 Cloud, a third-party SaaS. An
+architecture model is reconnaissance material: hostnames, network placement,
+service dependencies, trust boundaries, cloud account ids. Once uploaded it
+may be cached or indexed even if deleted later.
+
+The subcommand sits next to =build= and =export= in the same CLI, so a
+tab-completion slip or an agent is one word away from running it. The wrapper
+therefore refuses it before node starts:
+
+#+begin_example
+$ likec4 publish .
+likec4: 'publish' is disabled in this package (the model must not leave the machine)
+$ echo $?
+64
+#+end_example
+
+Layers of the guard:
+1. The wrapper refuses the subcommand (binary level).
+2. =Taskfile.yml= deliberately has no =publish= task.
+3. =passthru.tests.smoke= step 2 asserts exit 64, so removing the guard fails
+   =task test=.
+4. Claude Code denies =Bash(likec4 publish:*)= and =Bash(npx likec4:*)=
+   (=harness/claude/settings.json=).
+
+Sharing without the cloud: =likec4 build= (static site, self-hosted on
+authenticated internal hosting) or =likec4 export png= / SVG files.
+
+Lifting the guard is a deliberate change: remove the =publish= case in
+=bin/likec4.sh= and smoke step 2 in =default.nix=, in one reviewed commit.
+
+** AI provider keys are stripped
+
+=OPENAI_API_KEY=, =GEMINI_API_KEY=, =ANTHROPIC_API_KEY= and =GOOGLE_API_KEY=
+are unset. The dev server detects them, attempts a runtime =npm install= of a
+provider SDK (an unpinned download), and would send model content to that
+provider.
+
+** Vite cache outside the store
+
+The CLI builds its Vite configs with root inside =$out= and =configFile:false=,
+so the dependency optimizer would write to the read-only store and the dev
+server never serves react. =default.nix= patches the three configs to read
+=LIKEC4_VITE_CACHE_DIR= (count-checked: exactly 3, or the build fails); the
+wrapper defaults it to =${XDG_CACHE_HOME:-~/.cache}/likec4/<version>/vite=.
+
+** Playwright from nixpkgs
+
+=PLAYWRIGHT_BROWSERS_PATH= points at =playwright-driver.browsers= (chromium
+headless shell only). =package.json= overrides pin npm Playwright to
+=playwright-driver.version=; =default.nix= asserts they match at eval time.
+
+* Quick start
+
+#+begin_src bash :eval no
+cd packages/likec4
+task check   # eval
+task build
+task test    # smoke: validate, publish refused, build, dev server, PNG, MCP,
+             # vitest, Emacs, both MCP installers
+#+end_src
+
+Updating: =task update= (bumps likec4, =task lock=, check, build, test). After
+a nixpkgs bump that moves =playwright-driver=, set the =package.json=
+overrides to the new version and run =task lock=.
+
+* Root nixos integration
+
+The parent flake adds =inputs.likec4.url = "path:./packages/likec4"= (nixpkgs
+follows root) and installs =packages.default=.

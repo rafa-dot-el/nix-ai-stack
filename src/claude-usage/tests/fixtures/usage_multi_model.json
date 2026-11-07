@@ -1,0 +1,95 @@
+{
+  "five_hour": {
+    "utilization": 50.0,
+    "resets_at": "2026-07-12T20:00:00Z",
+    "limit_dollars": null,
+    "used_dollars": null,
+    "remaining_dollars": null
+  },
+  "seven_day": {
+    "utilization": 30.0,
+    "resets_at": "2026-07-17T00:00:00Z",
+    "limit_dollars": null,
+    "used_dollars": null,
+    "remaining_dollars": null
+  },
+  "seven_day_oauth_apps": null,
+  "seven_day_opus": null,
+  "seven_day_sonnet": null,
+  "seven_day_cowork": null,
+  "seven_day_omelette": null,
+  "tangelo": null,
+  "iguana_necktie": null,
+  "omelette_promotional": null,
+  "nimbus_quill": null,
+  "cinder_cove": null,
+  "amber_ladder": null,
+  "extra_usage": null,
+  "limits": [
+    {
+      "kind": "session",
+      "group": "five_hour",
+      "percent": 50.0,
+      "severity": "normal",
+      "resets_at": "2026-07-12T20:00:00Z",
+      "scope": null,
+      "is_active": true
+    },
+    {
+      "kind": "weekly_all",
+      "group": "seven_day",
+      "percent": 30.0,
+      "severity": "normal",
+      "resets_at": "2026-07-17T00:00:00Z",
+      "scope": null,
+      "is_active": true
+    },
+    {
+      "kind": "weekly_model",
+      "group": "seven_day",
+      "percent": 20.0,
+      "severity": "normal",
+      "resets_at": "2026-07-17T00:00:00Z",
+      "scope": {
+        "model": {
+          "id": "fable",
+          "display_name": "Fable"
+        },
+        "surface": null
+      },
+      "is_active": true
+    },
+    {
+      "kind": "weekly_model",
+      "group": "seven_day",
+      "percent": 45.0,
+      "severity": "warning",
+      "resets_at": "2026-07-17T00:00:00Z",
+      "scope": {
+        "model": {
+          "id": "opus-3",
+          "display_name": "Opus 3"
+        },
+        "surface": null
+      },
+      "is_active": true
+    },
+    {
+      "kind": "weekly_model",
+      "group": "seven_day",
+      "percent": 5.0,
+      "severity": "normal",
+      "resets_at": "2026-07-17T00:00:00Z",
+      "scope": {
+        "model": {
+          "id": "sonnet-4",
+          "display_name": "Sonnet 4"
+        },
+        "surface": "code"
+      },
+      "is_active": true
+    }
+  ],
+  "spend": null,
+  "member_dashboard_available": true
+}

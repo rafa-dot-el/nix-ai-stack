@@ -1,0 +1,20 @@
+[package]
+name = "gworkspace-auth"
+description = "OAuth 2.0 for the gworkspace binaries: installed-app consent, refresh, secret refs"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rafa-config = { path = "../../rafa-config" }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "form"] }
+serde = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["sync"] }
+url = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+url = "2"

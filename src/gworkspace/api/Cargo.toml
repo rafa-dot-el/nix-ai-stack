@@ -1,0 +1,22 @@
+[package]
+name = "gworkspace-api"
+description = "Google Workspace REST clients for the gworkspace binaries"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
+chrono-tz = "0.10"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "form"] }
+serde = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
+url = "2"
+
+[dev-dependencies]
+base64 = "0.22"
+url = "2"
+tokio = { version = "1", features = ["full"] }

@@ -1,0 +1,33 @@
+[package]
+name = "mcp"
+description = "One MCP entry point: proxy, stdio client, sidecar, config TUI, doctor"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "mcp"
+path = "src/main.rs"
+
+[dependencies]
+mcp-filter = { path = "../mcp-filter" }
+mcp-serve = { path = "../mcp-serve" }
+mcp-tokens = { path = "../mcp-tokens" }
+rafa-config = { path = "../rafa-config" }
+toon = { path = "../toon" }
+rmcp = { version = "3.8", default-features = false, features = ["client", "server", "macros", "transport-io", "transport-async-rw", "transport-child-process"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+libc = "0.2"
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+serde_yaml_ng.workspace = true

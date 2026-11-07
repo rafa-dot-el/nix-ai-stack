@@ -1,0 +1,120 @@
+#+title: mcp: one MCP entry point for every agent
+#+language: en
+
+=mcp= sits between every agent and every MCP server (ADR-0004). Agents start
+=mcp client=; one =mcp proxy= per user holds the connections to the servers;
+each server is its own socket-activated systemd user unit.
+
+#+begin_example
+agent ─stdio─▶ mcp client --profile coding ─unix─▶ mcp proxy ─unix─▶ %t/rafa/mcp/servers/<name>.sock
+                client-side include/exclude,      proxy-side include/exclude,    ◀── mcp-<name>.socket
+                rename, describe, TOON            rename, describe, prefixes          └─ mcp-<name>.service
+#+end_example
+
+* Commands
+
+#+begin_example
+mcp proxy                                  the daemon (mcp-proxy.service)
+mcp client --profile P [--project]         stdio MCP server for an agent
+mcp client --server S [--server S]... [--include a,S:b] [--exclude c] [--toon] [--timeout SECS]
+mcp sidecar --name N -- CMD [ARGS...]      serve a stdio-only server on its activated socket
+mcp doctor [--profile P] [--json]          what is served, exposed, saved; exit 1 on findings
+mcp config add-mcp NAME [--unix PATH | --command CMD] [--prefix P] [--include ..] [--exclude ..]
+                        [--describe tool=TEXT] [--timeout SECS] [-- ARGS...]
+mcp config add-profile NAME --server S... [--include ..] [--exclude ..] [--toon] [--timeout SECS]
+mcp config remove-mcp NAME | remove-profile NAME | show [--origin]
+mcp config-tui                             per-server/profile tool toggles with token estimates
+#+end_example
+
+Exit codes: 0 ok, 1 failure or findings, 2 usage error.
+
+* Configuration
+
+Layers, in load order:
+
+1. =~/.config/rafa/mcp.d/*.yaml= by name: written by Home Manager (=rafa.ai.mcp=), never edited by =mcp=.
+2. =~/.config/rafa/mcp.yaml=: yours. =mcp config= and =mcp config-tui= rewrite it atomically
+   (temporary file, fsync, rename, mode 0600). *Comments in it are not preserved.*
+3. =.rafa/mcp.yaml= in the current directory, only with =mcp client --project=. A project file can
+   declare =stdio= servers, so it is never loaded implicitly.
+
+A server or profile defined in two layers is an error unless the later one sets =override: true=
+(which replaces the whole entry). =mcp config show --origin= prints the file of every key.
+
+#+begin_src yaml
+version: 1
+proxy:
+  socket: ${XDG_RUNTIME_DIR}/rafa/mcp/proxy.sock   # default
+  pool: ${XDG_RUNTIME_DIR}/rafa/mcp/servers        # default; every <name>.sock here is a server
+  namespace: { separator: "-" }                    # exposed name = <prefix>-<tool>
+servers:                                           # optional per-server rules, by socket name
+  slack:
+    prefix: chat                                   # default: the server name; "" exposes bare names
+    include: ["search_*", "re:get_(user|channel)"] # empty: every tool
+    exclude: ["*_delete", { annotations: { destructiveHint: true } }]   # hidden; wins over include
+    rename: { conversations_history: history }
+    describe: { search_messages: "Search Slack (in:#chan from:@user)." }
+    timeout: 60s                                   # 30, 30s, 2m, 1h; default 120 s
+  scratch:                                         # not in the pool: connected by the proxy itself
+    transport: { stdio: { command: my-mcp, args: [--stdio], env: { A: b } } }
+  remote:
+    transport: { unix: /run/other/mcp.sock }
+profiles:
+  coding:
+    servers:
+      playwright: { include: ["browser_*"], exclude: [browser_install] }
+      gtasks: {}
+    toon: false
+    timeout: 30
+#+end_src
+
+Rules always match a server's *original* tool names, on both sides; a client rename is the final
+name verbatim. Two tools with the same exposed name are an error (the proxy refuses the list,
+=doctor= names both), never resolved silently. Hidden names, unknown names and the original name
+of a renamed tool are not callable.
+
+* Behaviour
+
+- Each agent connection is its own MCP session on the proxy. Progress notifications and
+  cancellation are relayed across both hops; a timeout cancels upstream and returns a tool error.
+- A server whose unit restarted is reconnected on the next call (its socket stays, so no pool
+  event fires). A server's =tools/list_changed= re-lists it and is passed down to every agent.
+- The pool is watched with inotify; a socket that does not accept yet is retried every 2 s.
+- The proxy binds its socket 0600 (umask before bind), refuses a socket another proxy serves and a
+  non-socket in its place, sends =READY=1= / =STOPPING=1=, and on SIGTERM stops accepting, lets
+  running calls finish for up to 10 s, then closes.
+- =mcp client= replays the agent's own =initialize= identity when it reconnects.
+- =mcp sidecar= needs =LISTEN_PID=/=LISTEN_FDS= from systemd and runs one child per connection,
+  killed when the connection closes.
+- Token counts are estimates: tiktoken =o200k_base= over each tool's =name=, =description= and
+  =inputSchema=.
+
+* Network endpoints
+
+None. =mcp= opens only unix sockets (its own, the pool's, configured ones) and spawns configured
+stdio commands; checked by =checks.mcp-hardening= (strace in the network-less sandbox).
+
+* Home Manager
+
+#+begin_src nix
+rafa.ai.mcp = {
+  enable = true;                                   # mcp, mcp-proxy.service, rafa-mcp.target
+  servers.playwright.enable = true;                # preset: headless, prefix "web", behind the sidecar
+  servers.mine = {
+    enable = true;
+    exec = [ "${pkgs.my-mcp}/bin/my-mcp" ];
+    native = false;                                # true: it takes the activated socket itself
+    credentials.token = "/run/agenix/my-token";    # LoadCredential; never in the unit or the store
+    exclude = [ { annotations.destructiveHint = true; } ];
+  };
+  profiles.coding.servers.playwright.include = [ "browser_*" ];
+};
+# agent MCP entry: { command = "mcp"; args = [ "client" "--profile" "coding" ]; }
+#+end_src
+
+Logs: =journalctl --user -t mcp-proxy= and =-t mcp-<name>=.
+
+* Development
+
+=task rust:test= (nextest + clippy) and =task rust:cov= (fails under 95% lines). =checks.mcp=
+runs the same tests in the Nix sandbox; =checks.vm-mcp-stack= runs the whole stack in a VM.

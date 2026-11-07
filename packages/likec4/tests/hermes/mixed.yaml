@@ -1,0 +1,6 @@
+# Two long values in different styles: no single width reproduces both.
+tts:
+  voice: 
+    /nix/store/00000000000000000000000000000000-hermes-piper-voice-en_GB-alba-medium/en_GB-alba-medium.onnx
+stt:
+  model: /nix/store/00000000000000000000000000000000-hermes-faster-whisper-base-model-directory-long

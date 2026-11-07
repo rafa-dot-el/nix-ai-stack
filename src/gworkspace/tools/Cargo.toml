@@ -1,0 +1,62 @@
+[package]
+name = "gworkspace"
+description = "Google Workspace CLIs and MCP servers: gtasks, gdocs, gsheets, gmeet, gcal, gmail, gdrive"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "gtasks"
+path = "src/bin/gtasks.rs"
+
+[[bin]]
+name = "gdocs"
+path = "src/bin/gdocs.rs"
+
+[[bin]]
+name = "gsheets"
+path = "src/bin/gsheets.rs"
+
+[[bin]]
+name = "gcal"
+path = "src/bin/gcal.rs"
+
+[[bin]]
+name = "gdrive"
+path = "src/bin/gdrive.rs"
+
+[[bin]]
+name = "gmail"
+path = "src/bin/gmail.rs"
+
+[[bin]]
+name = "gmeet"
+path = "src/bin/gmeet.rs"
+
+[dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+chrono-tz = "0.10"
+clap = { version = "4", features = ["derive"] }
+gworkspace-api = { path = "../api" }
+gworkspace-auth = { path = "../auth" }
+mcp-serve = { path = "../../mcp-serve" }
+rafa-config = { path = "../../rafa-config" }
+rmcp = { version = "3.8", default-features = false, features = ["server", "macros", "schemars", "transport-io", "transport-async-rw"] }
+schemars = "1"
+serde = { workspace = true }
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+
+[dev-dependencies]
+url = "2"
+base64 = "0.22"
+chrono-tz = "0.10"
+rmcp = { version = "3.8", default-features = false, features = ["client", "server", "transport-async-rw", "transport-child-process"] }

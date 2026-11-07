@@ -1,0 +1,19 @@
+{
+  "name": "likec4-nix",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "description": "Pins the likec4 CLI, its guardrail test runner and a Playwright aligned with nixpkgs for the nix package in this directory",
+  "engines": {
+    "node": ">=22.22.3"
+  },
+  "dependencies": {
+    "likec4": "1.60.0",
+    "vitest": "3.2.4"
+  },
+  "overrides": {
+    "playwright": "1.59.1",
+    "playwright-core": "1.59.1"
+  }
+}

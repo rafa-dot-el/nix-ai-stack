@@ -1,88 +1,175 @@
-#+title: nix-hermes: Hermes AI Agent for NixOS/home-manager
+#+title: nix-ai-stack: AI agents, MCP servers and tools for NixOS and Home Manager
 #+author: Rafael
 #+language: en
 
 * Overview
 
-A Nix flake wrapping [[https://github.com/NousResearch/hermes-agent][Nous Research's hermes-agent]] (v2026.8.31) with production-ready packaging for NixOS and home-manager.
+One Nix flake for an AI workstation: agents (Hermes, Claude Code, goose,
+Antigravity), first-party MCP servers and CLIs, and one =mcp= proxy that puts
+every server behind its own socket-activated systemd user service. Everything
+is built from source or pinned by hash, and every wrapper ships with self-update
+and telemetry switched off (ADR-0002).
+
+The consumer surface is one option tree, =rafa.ai=, on both NixOS and Home
+Manager (ADR-0006), plus =overlays.default= (=pkgs.rafa.ai.<name>=) and
+=packages.<system>.*=.
 
 ** Packages
 
-- =hermesFull= (also =default=): everything below — Chromium, Piper TTS, browser-use CLI, LSP servers, wake word, web dashboard, Electron desktop.
-- =hermes-slim=: bare CLI + TUI only, straight from upstream — no browser, no voice, no LSP servers, no Chromium.
-- =hermes-desktop-x11= / =hermes-desktop-wayland=: the packaged Electron app with =--ozone-platform= baked in.
-- =hermes-desktop=: launcher that picks the right desktop variant at runtime (=WAYLAND_DISPLAY=/=XDG_SESSION_TYPE=).
-- =ociImage=: an OCI/Docker image built from =hermesFull= (no Dockerfile — =pkgs.dockerTools.buildLayeredImage=), published as =rafadotel/hermes-agent= on Docker Hub.
+*** Agents
 
-** What =hermesFull= adds
+| Package | What |
+|---|---|
+| =default= / =hermesFull= | Hermes v0.22.5 with Chromium, Piper TTS, browser-use, LSP servers, faster-whisper, sherpa wake word, dashboard, desktop |
+| =hermes-slim= | Hermes CLI and TUI only |
+| =hermes-desktop=, =-x11=, =-wayland= | the Electron app; =hermes-desktop= picks the variant at runtime |
+| =claude-code=, =claude-agent-acp= | Claude Code and its ACP adapter |
+| =claude-desktop=, =claude-desktop-fhs= | Claude Desktop; the FHS variant runs npx/uvx/docker MCP servers |
+| =goose-cli=, =goose-desktop= | goose; telemetry forced off, desktop updater patched off |
+| =antigravity-cli= | the =agy= CLI |
+| =ollama=, =-rocm=, =-cuda=, =-vulkan= | ollama; no models shipped |
 
-- *Chromium* (local, on PATH) for browser automation
-- *Piper TTS* (local, GPL-3, no API keys, no per-call network round-trips)
-- *browser-use CLI* for autonomous browser control (attaches to running Chromium via CDP)
-- *LSP servers* pre-baked on PATH: pyright, typescript-language-server, gopls, rust-analyzer, clangd, nixd
-- *STT model* (faster-whisper "base") pre-fetched to avoid lazy downloads
-- *Wake word* (sherpa) with exact pinned versions to avoid runtime dependency mismatches
+*** First-party (=src/=)
 
-** What it re-exports
+| Package | What |
+|---|---|
+| =mcp= | proxy, stdio client, sidecar for stdio servers, config TUI, =doctor= (see =src/mcp/README.org=) |
+| =slack= | Slack MCP server and CLI: markdown, tables, files, drafts, scheduling, one send policy |
+| =gworkspace= | =gtasks=, =gdocs=, =gsheets=, =gcal=, =gmail=, =gdrive=, =gmeet= CLIs and MCP servers |
+| =tmpmail= | disposable inboxes, CLI and MCP server |
+| =claude-usage= | Claude plan usage: CLI, polybar format, Prometheus exporter |
+| =calibrectl= | Calibre library CLI and MCP server |
+| =zoteroctl= | Zotero library CLI and MCP server |
+| =rafa-voice= | the shared Piper TTS and faster-whisper STT (=say=, =transcribe=) |
 
-- NixOS system module (=nixosModules.default=) — see [[*NixOS dashboard/gateway services][NixOS dashboard/gateway services]] below; this is a small module purpose-built for running the dashboard and/or gateway, not a full re-export of upstream's module
-- home-manager module (=homeManagerModules.default=), unmodified from upstream
-- Prebuilt Hermes CLI, TUI, web dashboard, ACP, and Electron desktop
+*** Tools
 
-Upstream's own Nix packaging (NousResearch/hermes-agent) handles the heavy lifting; this wrapper adds the missing pieces for production use.
+| Package | What |
+|---|---|
+| =openspec= | spec-driven development CLI |
+| =plannotator= | plan and code review UI for agents |
+| =likec4= | architecture as code, with =likec4-mcp= |
+| =notebooklm-py= | NotebookLM CLI; =login= uses the Nix Playwright browsers and downloads nothing |
+| =patternfly-mcp=, =playwright-mcp= | stdio MCP servers, run behind =mcp sidecar= |
+| =ociImage= | =hermesFull= as an OCI image (=rafadotel/hermes-agent=) |
 
 * Quick Start
 
-** NixOS system
+** Flake input
 
-Add to your flake.nix:
-
-#+begin_src nix
+#+begin_src nix :eval no
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    hermes-nix = {
-      url = "github:rafa-dot-el/nix-hermes";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
+    home-manager = {
+      url = "github:nix-community/home-manager/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nix-ai-stack = {
+      url = "github:rafa-dot-el/nix-ai-stack";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
-
-  outputs = { self, nixpkgs, hermes-nix }:
-    let
-      system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
-    in
-    {
-      nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
-        inherit system;
-        modules = [
-          ./hardware-configuration.nix
-          hermes-nix.nixosModules.default
-          {
-            services.hermes-agent.dashboard.enable = true;
-            # See "NixOS dashboard/gateway services" below for bindAddress/port/domain/auth/gateway.
-          }
-        ];
-      };
-    };
 }
 #+end_src
 
-Then:
+Add =nix-ai-stack.nixosModules.default= to a NixOS configuration and
+=nix-ai-stack.homeManagerModules.default= to a Home Manager one.
 
-#+begin_src bash
-nixos-rebuild switch --flake .#myhost
+** Home Manager
+
+Each agent has one root switch that turns on its default stack. Long-running
+services never follow a root switch.
+
+#+begin_src nix :eval no
+{
+  rafa.ai = {
+    agents.claude.enable = true;        # code + acp + desktop + usage (CLI, polybar)
+    agents.hermes.enable = true;        # CLI, TUI, ACP, desktop, hardened config fragment
+    agents.antigravity.enable = true;
+
+    tools = {
+      openspec.enable = true;
+      plannotator.enable = true;
+      slack = {
+        enable = true;
+        settings = {
+          credentials.token.command = [ "pass" "show" "slack/token" ];
+          policy = { default = "deny"; rules = [ { match.self_dm = true; action = "live"; } ]; };
+        };
+      };
+    };
+
+    # voice is on by default: one Piper voice and Whisper model for every tool
+    voice.tts.voice = "en_GB-alba-medium";
+
+    mcp = {
+      enable = true;
+      servers.slack.enable = true;
+      servers.gtasks.enable = true;
+      servers.playwright.enable = true;
+      profiles.coding.servers = {
+        playwright.include = [ "browser_*" ];
+        gtasks.include = [ "list_*" "get_task" ];
+      };
+    };
+  };
+}
 #+end_src
 
-*** NixOS dashboard/gateway services
+Point an agent at a profile with =mcp client --profile coding= as its stdio
+MCP command.
 
-=services.hermes-agent= runs the web dashboard (=hermes dashboard=) and/or the messaging gateway (=hermes gateway=) as their own systemd services — always two separate processes, coordinating only through the shared =hermesHome=, never directly (verified against upstream's own module comments: the dashboard backend "does not run the messaging gateway... it does not contain a gateway"). This is a small, purpose-built module; upstream's fuller option surface (MCP servers, container mode, declarative config) is explicit future work, not available here yet.
+Secrets are always references (={ command = [...]; }= or ={ file = ...; }=),
+resolved by the tool at start-up. They are never written to the Nix store or a
+unit file.
 
-Shared options live at =services.hermes-agent.*= (=package=, =user=/=group=, =stateDir=, =hermesHome=, and the =lsp=/=voice=/=browser=/=gateway= feature toggles below); everything dashboard-specific is under =services.hermes-agent.dashboard.*=, mirroring the split upstream uses between its shared options and its own =backend.*= sub-namespace. =package= defaults to a build with exactly the enabled features — the Electron desktop app is *never* included, regardless of the toggles below (neither service needs it, and skipping it avoids an unnecessary Electron/Chromium-for-Electron dependency closure on a headless host).
+** NixOS
 
-#+begin_src nix
+#+begin_src nix :eval no
 {
-  services.hermes-agent = {
+  rafa.ai = {
+    agents.claude.enable = true;   # /etc/claude-desktop/managed-settings.json (auto-update off)
+    runtimes.ollama = { enable = true; variant = "cpu"; };   # OLLAMA_NO_CLOUD=1, no models
+    agents.hermes.server.dashboard.enable = true;            # see below
+  };
+}
+#+end_src
+
+* MCP stack
+
+#+begin_example
+agent --stdio--> mcp client --profile P --unix--> mcp proxy --unix--> %t/rafa/mcp/servers/<name>.sock
+                                                                       (mcp-<name>.socket activates mcp-<name>.service)
+#+end_example
+
+- The proxy finds servers by watching the pool directory; no server list is
+  needed. Each server is its own service with its own journal identifier
+  (=journalctl --user -u mcp-slack=).
+- Filters run on both sides: =include=, =exclude= (exclude wins), =rename=,
+  =describe=, matched on the original tool name. Two tools with the same
+  exposed name are an error, never resolved silently.
+- Config: Home Manager writes =~/.config/rafa/mcp.d/10-nix.yaml=; your own
+  =~/.config/rafa/mcp.yaml= is edited with =mcp config ...= or
+  =mcp config-tui=. A project's =.rafa/mcp.yaml= loads only with =--project=.
+- =mcp doctor= checks the config, the health of the proxy and every server,
+  and the token savings of each profile.
+
+Presets in =rafa.ai.mcp.servers=: =slack=, =gtasks=, =gdocs=, =gsheets=,
+=gcal=, =gdrive=, =gmail=, =gmeet=, =tmpmail=, =calibre=, =zotero=,
+=playwright=, =patternfly=, =likec4=.
+
+* Hermes
+
+** Hermes dashboard and gateway (NixOS)
+
+=rafa.ai.agents.hermes.server= (the old =rafa.ai.agents.hermes.server= name still works as an alias) runs the web dashboard (=hermes dashboard=) and/or the messaging gateway (=hermes gateway=) as their own systemd services — always two separate processes, coordinating only through the shared =hermesHome=, never directly (verified against upstream's own module comments: the dashboard backend "does not run the messaging gateway... it does not contain a gateway"). This is a small, purpose-built module; upstream's fuller option surface (MCP servers, container mode, declarative config) is explicit future work, not available here yet.
+
+Shared options live at =rafa.ai.agents.hermes.server.*= (=package=, =user=/=group=, =stateDir=, =hermesHome=, and the =lsp=/=voice=/=browser=/=gateway= feature toggles below); everything dashboard-specific is under =rafa.ai.agents.hermes.server.dashboard.*=, mirroring the split upstream uses between its shared options and its own =backend.*= sub-namespace. =package= defaults to a build with exactly the enabled features — the Electron desktop app is *never* included, regardless of the toggles below (neither service needs it, and skipping it avoids an unnecessary Electron/Chromium-for-Electron dependency closure on a headless host).
+
+#+begin_src nix :eval no
+{
+  rafa.ai.agents.hermes.server = {
     # hermesHome defaults to "${stateDir}/.hermes" — override to point it at
     # a separate volume. This is persistent application state (config.yaml,
     # sessions, memory, cron), not scratch/tmp. Shared between dashboard and
@@ -137,111 +224,78 @@ Without =domain=, the dashboard binds directly on =bindAddress=:=port= with no T
 
 PAM-based auth was considered and deliberately left out — it would need a custom nginx build plus giving the nginx worker access to a shadow-backed PAM stack, a materially larger attack surface than basicAuth/mTLS for a network-facing daemon. Left as explicit future work if actually needed.
 
-** home-manager
+** Configuration
 
-Add to your home.nix:
+Hermes reads its TTS and STT from the shared voice (=rafa.ai.voice=):
+=~/.config/rafa/voice.yaml= and the stable links under
+=~/.local/share/rafa/voice/{tts,stt}=.
 
-#+begin_src nix
-{
-  imports = [
-    # ... other imports
-  ];
-
-  inputs = {
-    home-manager.url = "github:nix-community/home-manager";
-    hermes-nix = {
-      url = "github:rafa-dot-el/nix-hermes";
-    };
-  };
-
-  home.packages = [
-    inputs.hermes-nix.packages.${pkgs.system}.default
-  ];
-
-  imports = [
-    inputs.hermes-nix.homeManagerModules.default
-  ];
-}
-#+end_src
-
-Or via standalone home-manager:
-
-#+begin_src bash
-# Add to ~/.config/home-manager/flake.nix inputs
-hermes-nix.url = "github:rafa-dot-el/nix-hermes"
-
-# In home.nix
-imports = [ hermes-nix.homeManagerModules.default ];
-home.packages = [ hermes-nix.packages.${system}.default ];
-
-# Apply
-home-manager switch --flake ~/.config/home-manager
-#+end_src
-
-* Configuration
-
-** Piper TTS (local text-to-speech)
-
-Edit your Hermes config.yaml:
-
-#+begin_src yaml
-tts:
-  provider: piper
-  piper:
-    # Path to the bundled Piper voice model
-    voice: /run/current-system/sw/share/hermes-agent/piper-voices/en_GB-alba-medium.onnx
-#+end_src
-
-No API key needed. Piper runs locally with zero network round-trips.
-
-To use a different voice, download from [[https://huggingface.co/rhasspy/piper-voices][rhasspy/piper-voices]] and update the path.
-
-** STT (speech-to-text)
-
-By default, faster-whisper "base" is bundled. Configure in config.yaml:
-
-#+begin_src yaml
-stt:
-  local:
-    model: /run/current-system/sw/share/hermes-agent/faster-whisper-base
-#+end_src
-
-** Browser automation (browser-use + agent-browser)
+*** Browser automation (browser-use + agent-browser)
 
 The CLI has two browser backends:
 - *browser-use*: Autonomous agent-driven browser control (=browser_exec=, the default backend — active whenever the =browser-use= CLI is on PATH, which it always is in this package)
 - *agent-browser*: Built-in browser toolset for hermes_agent (CDP-driven)
 
-Both need a Chromium actually listening for CDP, which is where upstream's
-own auto-detection falls short on a fresh machine: =browser-harness=
-(browser-use's local-Chrome discovery, pinned in [[file:browser.nix][browser.nix]]) only
-recognizes a browser holding one of a few standard profile dirs
-(=~/.config/{google-chrome,chromium,microsoft-edge}=) — a Chromium on any
-other =--user-data-dir= is invisible to it, and plain Chromium has no "Allow
-remote debugging?" toggle for it to fall back to either.
+Hermes starts its own Chromium on demand: the first =browser_exec= call of a
+session launches the packaged Chromium through =agent-browser= (upstream's
+=_resolve_managed_chromium_cdp=). Nothing has to be running beforehand, and
+nothing starts at =hermes= startup. The packaged Chromium runs headless, so it
+needs no display.
 
-Rather than patch that pinned dependency, [[file:browser-cdp.nix][browser-cdp.nix]] wraps
-=hermes=/=hermes-agent=/=hermes-acp= with a preflight that ensures a Chromium
-from this flake is listening on a dedicated, persistent profile and exports
-=BROWSER_CDP_URL= — Hermes's own first-class override for this
-(=browser.cdp_url= in config.yaml is the persistent equivalent), which both
-backends already honor ahead of any local-Chrome discovery. It backs off
-completely if a CDP endpoint is already configured (env or config.yaml), so
-it never overrides an explicit choice.
+A CDP endpoint configured by the operator (=BROWSER_CDP_URL=, =BU_CDP_URL=,
+=BU_CDP_WS=, or =browser.cdp_url= in config.yaml) takes precedence and is used
+as-is; Hermes does not launch anything in that case.
 
-Defaults: port =9222=, profile dir =$HERMES_HOME/chrome-debug= (matching
-upstream's own =chrome_debug_data_dir()= convention) — already distinct per
-profile, since each profile sets its own =HERMES_HOME= (see
-=services.hermes-agent.hermesHome= above, or a multi-profile CLI setup).
-Override either independently with =HERMES_BROWSER_DEBUG_PORT= /
-=HERMES_BROWSER_DEBUG_DIR= when a profile needs its own regardless of
-=HERMES_HOME=.
+*** Hardening (no self-update, no telemetry)
 
-** Wake word (sherpa)
+Every wrapper defaults the variables in =lib/hardening.nix= (=--set-default=,
+so any of them can still be overridden): Hermes's runtime package installs
+(=HERMES_DISABLE_LAZY_INSTALLS=), browser-harness and browser-use telemetry and
+update checks, the browser-use extension download, cua-driver telemetry and its
+release check, and Hugging Face telemetry. The browser comes from Nix: Hermes
+never downloads a Chromium into =HERMES_HOME/tools=.
+
+Some switches only exist in =config.yaml=. The package ships them as
+=share/hermes-agent/hardened-config.yaml= to merge into a profile:
+
+#+begin_src yaml :eval no
+updates: {check: false}
+plugins: {auto_update_check_hours: 0}
+model_catalog: {enabled: false}
+security: {allow_lazy_installs: false}
+lsp: {install_strategy: manual}
+telemetry: {shared_metrics: {enabled: false}}
+#+end_src
+
+What cannot be switched off (verified against the source):
+- Hermes fetches =models.dev/api.json= for model metadata; only its URL is configurable.
+- =browser-harness --doctor= and =--update= contact PyPI when run explicitly.
+
+=checks.hardening= verifies every wrapper sets each variable, sets none of the
+forbidden ones, and that =hermes --version= makes no off-host =connect()=.
+
+*** Integration tests
+
+=tests/integration= drives =hermes-acp= (the ACP front door an editor uses)
+against a scripted fake of the OpenAI Chat Completions API, so the model's
+turns are fixed and the assertions are on what Hermes sent the backend and on
+the browser it actually drove.
+
+#+begin_src bash :eval no
+task test:unit          # the fake backend itself: pure Python, no nix build
+task test:integration   # builds the package, then runs everything (needs network for the Cat test)
+task test:integration -- -m "not network"   # offline subset
+#+end_src
+
+Each test gets its own profile, HOME, TMPDIR and agent-browser/browser-harness
+runtime dirs under =/tmp/hi-*=, and tears down what it started. Set
+=HERMES_IT_KEEP_SESSIONS=1= to keep those directories after a run for debugging.
+
+*** Wake word (sherpa)
 
 Configured via config.yaml:
 
-#+begin_src yaml
+#+begin_src yaml :eval no
 wake_word:
   provider: sherpa
 #+end_src
@@ -256,7 +310,7 @@ To avoid 30+ minute builds on first install, use the binary cache:
 
 Add to your configuration.nix:
 
-#+begin_src nix
+#+begin_src nix :eval no
 {
   nix.settings = {
     substituters = [
@@ -275,7 +329,7 @@ Add to your configuration.nix:
 
 Add to your home.nix:
 
-#+begin_src nix
+#+begin_src nix :eval no
 {
   nix.settings = {
     substituters = [
@@ -296,7 +350,7 @@ With the cache configured, =nixos-rebuild= or =home-manager switch= pulls pre-bu
 
 =rafadotel/hermes-agent= on Docker Hub is =hermesFull= packaged as an OCI image (built via =pkgs.dockerTools.buildLayeredImage=, no Dockerfile). Currently =linux/amd64= only — =arm64= isn't wired into CI yet (see =task oci:push= below to publish one by hand from an aarch64 host).
 
-#+begin_src bash
+#+begin_src bash :eval no
 docker pull rafadotel/hermes-agent:latest
 docker run --rm -it rafadotel/hermes-agent:latest
 #+end_src
@@ -307,20 +361,20 @@ Tags: =latest= (tracks =main=) and a version tag per release (e.g. =2026.8.27=, 
 
 If you prefer to build locally (or the cache is unavailable):
 
-#+begin_src bash
-nix build github:rafa-dot-el/nix-hermes#default --no-link   # hermesFull
-nix build github:rafa-dot-el/nix-hermes#hermes-slim --no-link   # bare CLI+TUI
+#+begin_src bash :eval no
+nix build github:rafa-dot-el/nix-ai-stack#default --no-link   # hermesFull
+nix build github:rafa-dot-el/nix-ai-stack#hermes-slim --no-link   # bare CLI+TUI
 #+end_src
 
 Or in a flake project with =hermes-nix= as an input:
 
-#+begin_src bash
+#+begin_src bash :eval no
 nix build .#hermes-nix.packages.${system}.default --no-link
 #+end_src
 
 Or with this repo checked out, via Task (see its own targets for the full local build/publish flow — =task build=, =task build:slim=, =task build:desktop=, =task oci:build=/=oci:push=, =task cache:push=, =task tag=/=task release=):
 
-#+begin_src bash
+#+begin_src bash :eval no
 task build
 #+end_src
 
@@ -328,63 +382,40 @@ task build
 
 Currently supported: x86_64-linux, aarch64-linux
 
-#+begin_src bash
+#+begin_src bash :eval no
 # Build for aarch64 on x86_64 (requires remote builder or native aarch64 system)
-nix build --system aarch64-linux github:rafa-dot-el/nix-hermes#default
+nix build --system aarch64-linux github:rafa-dot-el/nix-ai-stack#default
 #+end_src
-
-* Features
-
-- ✓ Modular packages: =hermesFull= (everything), =hermes-slim= (bare CLI+TUI), =hermes-desktop-x11=/=-wayland=/launcher
-- ✓ Local Chromium for browser automation
-- ✓ Piper TTS (no cloud services, no API keys)
-- ✓ browser-use for autonomous browser control
-- ✓ LSP servers (6 languages supported)
-- ✓ STT (faster-whisper) pre-fetched
-- ✓ Wake word (sherpa) with exact version pinning
-- ✓ Pre-built Hermes CLI, TUI, web dashboard
-- ✓ Electron desktop app, split into x11/wayland variants plus a runtime-detecting launcher
-- ✓ NixOS dashboard/gateway service module (feature-toggled package, dedicated user, firewall, Let's Encrypt TLS, HTTP Basic Auth/mTLS) + home-manager module
-- ✓ Binary cache (Cachix) for fast installs
-- ✓ Docker Hub image (=rafadotel/hermes-agent=, =linux/amd64=)
-- ✓ Supports x86_64-linux and aarch64-linux
 
 * Troubleshooting
 
 ** Piper TTS not found
 
-Check that the voice path exists:
+Check the stable links the voice module writes:
 
-#+begin_src bash
-ls -la /run/current-system/sw/share/hermes-agent/piper-voices/
+#+begin_src bash :eval no
+ls -la ~/.local/share/rafa/voice/tts ~/.local/share/rafa/voice/stt
+cat ~/.config/rafa/voice.yaml
 #+end_src
-
-If missing, verify Hermes is installed correctly and Nix cache is working.
 
 ** Browser automation not working
 
-First check whether the auto-launched debug Chromium ever came up:
+Check the agent log for the browser session that =browser_exec= creates:
 
-#+begin_src bash
-echo "${HERMES_HOME:-$HOME/.hermes}/chrome-debug/DevToolsActivePort"
-cat "${HERMES_HOME:-$HOME/.hermes}/chrome-debug/DevToolsActivePort"
+#+begin_src bash :eval no
+grep -E "Created local browser session|browser_exec" "${HERMES_HOME:-$HOME/.hermes}/logs/agent.log" | tail -5
 #+end_src
 
-No such file: the preflight ([[file:browser-cdp.nix][browser-cdp.nix]]) couldn't launch Chromium (no
-display, sandboxing, disk full, …) — run it directly to see why:
+If the session never starts, the =browser_exec= result carries the failure
+from browser-harness or agent-browser in its =stderr=.
 
-#+begin_src bash
-hermes-ensure-browser-debug
-#+end_src
+A CDP endpoint configured through =BROWSER_CDP_URL=/=BU_CDP_URL=/=BU_CDP_WS=
+or =browser.cdp_url= in config.yaml is used instead of the packaged Chromium,
+so if one is set, check that it is reachable.
 
-A CDP endpoint already configured (=BROWSER_CDP_URL=/=BU_CDP_URL=/=BU_CDP_WS=
-env, or =browser.cdp_url= in config.yaml) makes the preflight back off
-entirely — that endpoint is then on you to keep reachable.
+Ensure Chromium itself is on PATH:
 
-Ensure Chromium itself is on PATH (used directly by =agent-browser= and by
-the preflight):
-
-#+begin_src bash
+#+begin_src bash :eval no
 which chromium
 #+end_src
 
@@ -394,7 +425,7 @@ If not found, verify the Hermes package is correctly installed with extraPathToo
 
 Verify the server is on PATH:
 
-#+begin_src bash
+#+begin_src bash :eval no
 which pyright typescript-language-server gopls rust-analyzer clangd nixd
 #+end_src
 
@@ -404,17 +435,32 @@ Configure in Hermes: =lsp.install_strategy: manual= in config.yaml.
 
 If building locally (without Cachix), the build is resource-intensive (~30 min on modern hardware, ~8GB RAM). Use the binary cache or increase system resources.
 
+* Development
+
+| Task | Runs |
+|---|---|
+| =task check= | lint and flake evaluation |
+| =task check:inputs= | every nixpkgs in =flake.lock= follows a root channel |
+| =task test= | every flake check, VM tests included |
+| =task rust:test=, =task rust:cov= | the Rust workspace; coverage gate 95% pure, 85% overall |
+| =task py:test= | calibrectl and zoteroctl, coverage gate 95% |
+| =task check-update= | latest upstream version of every package |
+
+Architecture decisions are in =gov/adr/=; requirements in
+=gov/requirements.org=.
+
 * Repository
 
-- *GitHub:* https://github.com/rafa-dot-el/nix-hermes
+- https://github.com/rafa-dot-el/nix-ai-stack
 
 * License
 
-GPL-3.0 (same as Hermes and Piper)
+GPL-3.0
 
 * References
 
 - [[https://github.com/NousResearch/hermes-agent][NousResearch/hermes-agent]]
-- [[https://huggingface.co/rhasspy/piper-voices][rhasspy/piper-voices (Hugging Face)]]
+- [[https://modelcontextprotocol.io/][Model Context Protocol]]
+- [[https://huggingface.co/rhasspy/piper-voices][rhasspy/piper-voices]]
 - [[https://github.com/vercel-labs/agent-browser][vercel-labs/agent-browser]]
-- [[https://browser-use.com/][Browser Use documentation]]
+- [[https://browser-use.com/][Browser Use]]

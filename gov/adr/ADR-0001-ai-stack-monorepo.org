@@ -1,0 +1,35 @@
+#+title: ADR-0001 nix-hermes becomes the nix-ai-stack monorepo
+:PROPERTIES:
+:STATUS:        Proposed
+:DATE:          2026-10-31
+:SUPERSEDES:
+:SUPERSEDED_BY:
+:REQUIREMENTS:  FR01.1 FR01.2 NFR-SEC.P02
+:COMMITS:
+:END:
+
+* Context
+The flake packages Hermes only. The rest of the AI stack (claude-code, claude-desktop, antigravity, openspec, plannotator, likec4, first-party MCP servers) lives as 13 separate subflakes under the NixOS configuration repository's =packages/= directory and its =src/= directory, each with its own nixpkgs pin and flake.lock. The root nixpkgs here is nixos-25.11 (locked 2026-06-30, past support) and no input uses =follows=.
+
+* Decision
+Rename the repository to =nix-ai-stack= and make it one flake: third-party packaging in =packages/<name>/=, first-party code in =src/<project>/=, Hermes files stay at the root. Every input follows one of two nixpkgs (=nixos-26.05=, =nixos-unstable=); =task check:inputs= enforces it.
+
+* Change
+#+begin_src diff
+- inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";   # no follows anywhere
+- hermes-agent-src (own nixpkgs-unstable, uv2nix, home-manager, flake-parts)
++ inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
++ inputs.nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
++ hermes-agent-src.inputs.nixpkgs.follows = "nixpkgs-unstable";   # + uv2nix, pyproject-*, home-manager
++ packages/<name>/default.nix  (callPackage, no per-package flake)
++ src/Cargo.toml               (one Rust workspace, one Cargo.lock)
+#+end_src
+
+* Alternatives
+- Keep per-package subflakes (copy the NixOS configuration repository's =packages/= directory verbatim): 13 locks, no shared checks, duplicated nixpkgs; rejected.
+- Separate repository consuming nix-hermes: two places to change for every bump; rejected.
+
+* Consequences
+- One lock, one cache push, shared =checks=; a nixpkgs bump affects every package at once (gated by the full test suite).
+- If a single upstream input cannot follow (Hermes uv2nix), that follows is dropped with a superseding ADR and a GTD item.
+- the author's NixOS configuration repository later replaces its =path:= inputs with this flake (M15).

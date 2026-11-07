@@ -1,0 +1,17 @@
+[package]
+name = "mcp-serve"
+description = "How every first-party MCP server listens: stdio, a unix socket, or a systemd-activated one"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+libc = "0.2"
+rmcp = { version = "3.8", default-features = false, features = ["server", "transport-io", "transport-async-rw"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+
+[dev-dependencies]
+rmcp = { version = "3.8", default-features = false, features = ["client", "server", "transport-async-rw"] }
+tempfile = "3"

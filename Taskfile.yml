@@ -5,6 +5,36 @@ silent: true
 vars:
   PKG_DIR: "{{.TASKFILE_DIR}}"
 
+# One include per package under packages/ (build, test, check-update, update).
+includes:
+  pkg:claude-code:
+    taskfile: ./packages/claude-code
+    dir: ./packages/claude-code
+  pkg:antigravity-cli:
+    taskfile: ./packages/antigravity-cli
+    dir: ./packages/antigravity-cli
+  pkg:claude-agent-acp:
+    taskfile: ./packages/claude-agent-acp
+    dir: ./packages/claude-agent-acp
+  pkg:openspec:
+    taskfile: ./packages/openspec
+    dir: ./packages/openspec
+  pkg:likec4:
+    taskfile: ./packages/likec4
+    dir: ./packages/likec4
+  pkg:claude-desktop:
+    taskfile: ./packages/claude-desktop
+    dir: ./packages/claude-desktop
+  pkg:plannotator:
+    taskfile: ./packages/plannotator
+    dir: ./packages/plannotator
+  pkg:patternfly-mcp:
+    taskfile: ./packages/patternfly-mcp
+    dir: ./packages/patternfly-mcp
+  pkg:notebooklm-py:
+    taskfile: ./packages/notebooklm-py
+    dir: ./packages/notebooklm-py
+
 tasks:
   default:
     desc: "List tasks"
@@ -29,11 +59,58 @@ tasks:
       - |
         set -euo pipefail
         rc=0
-        for f in $(find . -name '*.nix' -not -path './.git/*'); do
+        for f in $(find . -name '*.nix' -not -path './.git/*' -not -path './result*'); do
           nix-instantiate --parse "$f" >/dev/null 2>&1 || { echo "FAIL: $f"; rc=1; }
         done
-        nix run nixpkgs#actionlint -- .github/workflows/*.yml || rc=1
+        nix develop .#default -c actionlint .github/workflows/*.yml || rc=1
         exit $rc
+
+
+  rust:test:
+    desc: "Run the Rust workspace's tests (cargo nextest) and clippy"
+    dir: "{{.TASKFILE_DIR}}/src"
+    cmds:
+      - nix develop "{{.TASKFILE_DIR}}#rust" -c cargo nextest run --workspace {{.CLI_ARGS}}
+      - nix develop "{{.TASKFILE_DIR}}#rust" -c cargo clippy --workspace --all-targets -- -D warnings
+
+  rust:cov:
+    desc: "Line coverage (cargo llvm-cov): the pure crates must reach 95%, the whole workspace 85%"
+    dir: "{{.TASKFILE_DIR}}/src"
+    vars:
+      # The effectful code: binaries, servers, CLI glue, HTTP and file I/O. Everything else is
+      # pure (mcp-filter, mcp-tokens, rafa-config, toon, gworkspace-api, gworkspace-auth, and
+      # slack's analysis, blocks, config, policy, send, spec, target and wire modules,
+      # tmpmail's format and identities, claude-usage's creds, exporter, format, model,
+      # table and vars).
+      EFFECTFUL: '/src/(mcp|mcp-serve|voice|gworkspace/tools)/|/src/slack/src/(actions|client|main|mcp|prepare|read|setup)\.rs|/src/tmpmail/src/(api|main|mcp|ops|setup)\.rs|/src/claude-usage/src/(client|config|main)\.rs'
+    cmds:
+      - nix develop "{{.TASKFILE_DIR}}#rust" -c cargo llvm-cov nextest --workspace --no-report {{.CLI_ARGS}}
+      - echo "[*] pure crates (gate 95%)"
+      - nix develop "{{.TASKFILE_DIR}}#rust" -c cargo llvm-cov report --summary-only --ignore-filename-regex '{{.EFFECTFUL}}' --fail-under-lines 95
+      - echo "[*] whole workspace (floor 85%)"
+      - nix develop "{{.TASKFILE_DIR}}#rust" -c cargo llvm-cov report --summary-only --fail-under-lines 85
+
+  py:test:
+    desc: "pytest for a first-party Python project (PROJECT=calibrectl|zoteroctl), with per-module coverage"
+    dir: "{{.TASKFILE_DIR}}/src/{{.PROJECT}}"
+    requires: { vars: [PROJECT] }
+    cmds:
+      - nix develop "{{.TASKFILE_DIR}}#python" -c python -m pytest -p no:cacheprovider --cov-report=term-missing {{.CLI_ARGS}}
+
+  check:inputs:
+    desc: "Every nixpkgs in flake.lock must be the root nixpkgs or nixpkgs-unstable (all inputs follow, ADR-0001)"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        bad="$(nix develop .#default -c jq -r -f scripts/check-inputs.jq flake.lock)"
+        if [ -n "$bad" ]; then
+          echo "[-] check:inputs: nixpkgs nodes that do not follow a root channel:"
+          echo "$bad"
+          exit 1
+        fi
+        echo "[+] check:inputs: every nixpkgs follows a root channel"
 
   build:
     desc: "Build the default package (hermes CLI + TUI + web dashboard + ACP + TTS/STT) via this package's own flake"
@@ -99,18 +176,38 @@ tasks:
         out="$(nix build --no-link --print-out-paths .#hermes-desktop)"
         exec "$out/bin/hermes-desktop" {{.CLI_ARGS}}
 
-  test:
-    desc: "Run passthru.tests if defined, else build the package itself"
+  test:unit:
+    desc: "Unit tests: repo gates (tests/unit) and the mock OpenAI backend (pure Python, no nix build, no network)"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - nix develop .#itest -c pytest tests/unit tests/integration/test_mock_openai.py -v {{.CLI_ARGS}}
+
+  test:integration:
+    desc: "Run hermes-acp against the mock OpenAI backend (browser_exec drives a headless Chromium)"
     dir: "{{.TASKFILE_DIR}}"
     silent: true
     cmds:
       - |
-        if nix eval --json .#default.passthru.tests >/dev/null 2>&1; then
-          nix build .#default.passthru.tests --no-link
-        else
-          echo "no passthru.tests -- building package itself"
-          nix build .#default --no-link
-        fi
+        set -euo pipefail
+        HERMES_OUT="$(nix build .#default --no-link --print-out-paths)"
+        export HERMES_OUT
+        nix develop .#itest -c pytest tests/integration -v {{.CLI_ARGS}}
+
+  test:
+    desc: "Build every flake check for this system (checks/*.nix: pure eval and sandboxed tests)"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        system="$(nix eval --raw --impure --expr builtins.currentSystem)"
+        names="$(nix eval --raw ".#checks.${system}" --apply 'c: builtins.concatStringsSep " " (builtins.attrNames c)')"
+        targets=""
+        for name in $names; do targets="$targets .#checks.${system}.${name}"; done
+        echo "[*] checks: ${names}"
+        nix build --no-link $targets
+        echo "[+] checks passed: ${names}"
 
   cache:push:
     desc: >-
@@ -195,7 +292,7 @@ tasks:
       - |
         set -euo pipefail
         : "${TAG:?TAG=vX.Y.Z is required}"
-        gh release create "$TAG" -R rafa-dot-el/nix-hermes \
+        gh release create "$TAG" -R rafa-dot-el/nix-ai-stack \
           --title "$TAG" \
           --generate-notes \
           --notes "Cachix cache: https://app.cachix.org/cache/rafa-dot-el#pull
@@ -262,8 +359,27 @@ tasks:
 
   update:flake-lock:
     internal: true
-    desc: "Refresh this package's own flake.lock"
+    desc: "Re-lock only hermes-agent-src (and what follows it); nixpkgs moves only via update:nixpkgs"
     dir: "{{.TASKFILE_DIR}}"
     silent: true
     cmds:
-      - nix flake update
+      - nix flake update hermes-agent-src
+      - |
+        set -euo pipefail
+        # nixpkgs-unstable tracks the exact nixpkgs upstream Hermes locks (see flake.nix).
+        src="$(nix eval --raw --impure --expr '(builtins.getFlake (toString ./.)).inputs.hermes-agent-src.outPath')"
+        REV="$(jq -r '.nodes[.nodes.root.inputs.nixpkgs].locked.rev' "$src/flake.lock")"
+        [[ "$REV" =~ ^[0-9a-f]{40}$ ]] || { echo "[-] could not read upstream's nixpkgs rev" >&2; exit 1; }
+        REV="$REV" perl -i -pe 's#(nixpkgs-unstable\.url = "github:nixos/nixpkgs/)[^"]+#$1$ENV{REV}#' flake.nix
+        nix flake update nixpkgs-unstable
+        echo "[+] nixpkgs-unstable pinned to upstream Hermes's ${REV:0:7}"
+      - task: check:inputs
+
+  update:nixpkgs:
+    desc: "Bump the stable nixpkgs (moves Chromium and every package; nixpkgs-unstable follows upstream Hermes via update)"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - nix flake update nixpkgs
+      - task: check:inputs
+      - task: check

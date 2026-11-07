@@ -1,0 +1,22 @@
+# Hermes profile fixture: blank lines before comment blocks, a wrapped long
+# value, a `~` null and an existing server must all survive an edit.
+model:
+  default: x   # inline comment
+  provider: openrouter
+terminal:
+  cwd: ~
+  timeout: 1800
+tts:
+  piper:
+    voice: 
+      /nix/store/00000000000000000000000000000000-hermes-piper-voice-en_GB-alba-medium/en_GB-alba-medium.onnx
+skills:
+  external_dirs:
+    - ~/skills
+mcp_servers:
+  mcp-taskfile:
+    command: mcp-taskfile
+
+# ── Security ──────────────────────────────────────────────────────────
+security:
+  redact_secrets: true

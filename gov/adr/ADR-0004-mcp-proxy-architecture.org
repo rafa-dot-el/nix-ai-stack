@@ -1,0 +1,34 @@
+#+title: ADR-0004 One Rust mcp binary: client, proxy, socket-activated servers, layered YAML
+:PROPERTIES:
+:STATUS:        Proposed
+:DATE:          2026-10-31
+:SUPERSEDES:
+:SUPERSEDED_BY:
+:REQUIREMENTS:  FR03.1 FR03.2 NFR-SEC.P03 NFR-OPS.01
+:COMMITS:
+:END:
+
+* Context
+Today =mcp-proxy= (Go) multiplexes daemon MCPs found as symlinks in =%t/mcp.d=, polled every 30s; harnesses spawn =mcp-proxy bridge=. Known defects: the bridge relays raw 32 KiB chunks and does not replay =initialize= on reconnect; one backend session is shared by every client (no notification, progress or cancellation forwarding); refresh compares names only; errors detected by string matching; a hardcoded alias map; no filtering. =mcp-filter= (Rust, a private predecessor project) filters and renames tools but matches exact names only, serialises calls per child, rewrites its YAML losing comments, and is not wired into any harness. The Slack HM module puts a client secret into a store unit.
+
+* Decision
+Write a fresh Rust binary =mcp= on rmcp 3.8 with subcommands =proxy=, =client=, =sidecar=, =config-tui=, =config add-mcp|add-profile|remove-*|show= and =doctor=. Every Nix-declared MCP server is its own Home Manager socket unit + service in =%t/rafa/mcp/servers/=; the proxy discovers sockets by inotify and needs no server list. Stdio-only servers run behind =mcp sidecar= so they are services too. Configuration is =~/.config/rafa/mcp.yaml= (user, written by the CLI/TUI) layered over =~/.config/rafa/mcp.d/*.yaml= (Nix, read-only) and, only with =--project=, =.rafa/mcp.yaml=. Filtering is =include=/=exclude= (exclude = hidden) on the proxy side and the client side, matched on original names, with rename/describe and a load-time collision error. The TOON formatter is copied from a private predecessor project (MIT notice kept).
+
+* Change
+#+begin_src text
+agent ─stdio─▶ mcp client --profile P | --server S --include a,b --exclude c --toon --timeout 30
+      ─unix─▶ mcp proxy  (per-client sessions, ID remap, notifications/progress/cancel, filters)
+      ─unix─▶ %t/rafa/mcp/servers/<name>.sock ◀ mcp-<name>.socket → mcp-<name>.service (LISTEN_FDS)
+crates: rafa-config, mcp-filter, mcp-tokens, toon (pure); mcp-transport, mcp-session, mcp (effects)
+#+end_src
+
+* Alternatives
+- Patch the Go proxy: its session model (one shared backend session) is the root cause; a rewrite is smaller than retrofitting per-client sessions. Rejected.
+- Reuse the runtime crates of a private predecessor project: 28 known defects (registry poisoning on collision, no SIGTERM drain, ignored intervals, chmod race); Rafael chose fresh crates. Rejected.
+- Proxy-supervised children for all servers: one process owns every lifecycle and log stream; per-server units give restart, journal identity and isolation for free. Rejected (kept only for non-Nix =add-mcp --command=).
+- Auto-loading =.rafa/mcp.yaml= from the working directory: a cloned repository could start commands as the user. Rejected; =--project= is the consent.
+
+* Consequences
+- Tool names exposed to agents change once (new prefix scheme); harness stanzas and skill docs in the author's NixOS configuration repository are rewritten at decommission.
+- =mcp= never writes systemd units; declarative state stays in Nix.
+- Model: add =mcp= components and the agent→proxy→server flow to the LikeC4 model when it is created.

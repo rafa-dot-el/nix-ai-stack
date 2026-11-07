@@ -1,0 +1,61 @@
+version: "3"
+
+silent: true
+
+# Included from the root Taskfile as pkg:plannotator; builds through the root flake.
+# bun and bun2nix come from the flake's `update` dev shell, never from the host.
+vars:
+  HASHES: "{{.TASKFILE_DIR}}/hashes.json"
+  ATTR: "{{.ROOT_DIR}}#plannotator"
+  REPO: backnotprop/plannotator
+
+tasks:
+  build:
+    desc: "Build plannotator"
+    cmds:
+      - nix build "{{.ATTR}}" --no-link
+
+  test:
+    desc: "Build plannotator's smoke and hardening checks"
+    cmds:
+      - nix build "{{.ROOT_DIR}}#checks.x86_64-linux.plannotator-smoke" "{{.ROOT_DIR}}#checks.x86_64-linux.plannotator-hardening" --no-link
+
+  check-update:
+    desc: "Exit 0 if GitHub has a newer release; exit 1 if current; exit 2 on errors"
+    cmds:
+      - |
+        set -euo pipefail
+        LOCAL="$(jq -r .version "{{.HASHES}}")"
+        REMOTE="$(gh api "repos/{{.REPO}}/releases/latest" --jq '.tag_name | ltrimstr("v")')"
+        if [ -z "$REMOTE" ] || [ -z "$LOCAL" ]; then
+          echo "[-] check-update: could not read versions (local='$LOCAL' remote='$REMOTE')" >&2; exit 2
+        fi
+        if [ "$REMOTE" = "$LOCAL" ]; then echo "[*] check-update: plannotator up to date ($LOCAL)"; exit 1; fi
+        echo "[*] check-update: plannotator $LOCAL -> $REMOTE"
+
+  update:
+    desc: "Bump to the latest release: hashes.json, bun.nix (bun2nix), the stale-lock patch; build, test"
+    cmds:
+      - |
+        set -euo pipefail
+        V="${VERSION:-$(gh api "repos/{{.REPO}}/releases/latest" --jq '.tag_name | ltrimstr("v")')}"
+        [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "[-] update: unexpected version '$V'" >&2; exit 2; }
+        H="$(nix store prefetch-file --unpack --json "https://github.com/{{.REPO}}/archive/refs/tags/v$V.tar.gz" | jq -r .hash)"
+        jq --arg v "$V" --arg h "$H" '.version = $v | .hash = $h' "{{.HASHES}}" > "{{.HASHES}}.tmp"
+        mv "{{.HASHES}}.tmp" "{{.HASHES}}"
+        TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+        git -c advice.detachedHead=false clone --quiet --depth=1 --branch="v$V" "https://github.com/{{.REPO}}.git" "$TMP/src"
+        # 1. A bun.lock that `bun install --lockfile-only` still rewrites is stale upstream:
+        #    the rewrite becomes fix-stale-bun-lock.patch (applied in default.nix's patches).
+        (cd "$TMP/src" && nix develop "{{.ROOT_DIR}}#update" -c bun install --lockfile-only >/dev/null 2>&1 \
+          && git diff -- bun.lock) > fix-stale-bun-lock.patch
+        # 2. bun.nix from the refreshed lock, so it holds every version the patched lock names.
+        #    In-repo workspace packages come out as single-line `= copyPathToStore ./...;`
+        #    entries that only resolve inside upstream's tree: drop exactly those. Published
+        #    @plannotator/* packages are multi-line registry entries and stay.
+        (cd "$TMP/src" && nix develop "{{.ROOT_DIR}}#update" -c bun2nix -o bun.nix)
+        grep -vE '^  "[^"]+" = copyPathToStore \./[^;]*;$' "$TMP/src/bun.nix" > bun.nix
+        nix-instantiate --parse bun.nix >/dev/null
+        echo "[+] update: plannotator $V ($H); stale-lock patch: $( [ -s fix-stale-bun-lock.patch ] && echo non-empty || echo empty)"
+      - task: build
+      - task: test

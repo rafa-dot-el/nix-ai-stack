@@ -11,39 +11,24 @@
 # "computer-use" -> withBrowser (it's just the MCP client bits for
 # cua-driver), "messaging"/"matrix" -> withGateway.
 , withLsp ? true
-, withVoice ? true
+# The sherpa/sentencepiece wheels in voice.nix are x86_64-only: voice defaults off elsewhere.
+, withVoice ? stdenv.hostPlatform.isx86_64
 , withBrowser ? true
 , withGateway ? true
 , withDesktop ? true
 }:
 
+assert lib.assertMsg (withVoice -> stdenv.hostPlatform.isx86_64)
+  "hermes: withVoice needs x86_64-linux (voice.nix pins x86_64-only sherpa-onnx/sentencepiece wheels)";
+
 let
   inherit (pkgs.callPackage ./browser.nix { inherit chromium; })
     browserUse agentBrowser cuaDriver buzzCli;
 
-  browserEnsureDebug = pkgs.callPackage ./browser-cdp.nix { inherit chromium; };
-
-  # Cheap, instant --run hook for every `hermes`/`hermes-agent`/`hermes-acp`
-  # launch: only computes and exports the CDP URL Hermes should aim at if it
-  # ever needs one — never probes or launches Chromium here. Hermes's own
-  # browser_exec resolution (tools/browser_use_cli.py:_resolve_backend_cdp)
-  # reads BROWSER_CDP_URL from THIS process's env, but only when the agent
-  # actually calls a browser tool, at which point it spawns the browser-use
-  # CLI as a fresh subprocess — THAT wrapper (browser.nix) is where the real
-  # probe-and-launch happens, lazily, exactly once per actual need. Doing the
-  # heavy work here instead would launch a whole Chromium on every `hermes`
-  # invocation, including ones that never touch a browser tool at all.
-  browserCdpAutoRun = ''
-    if [ -z "''${BROWSER_CDP_URL:-}" ] && [ -z "''${BU_CDP_URL:-}" ] && [ -z "''${BU_CDP_WS:-}" ]; then
-      _hermes_cdp_url="$(${browserEnsureDebug}/bin/hermes-ensure-browser-debug --print-only 2>/dev/null)" || _hermes_cdp_url=""
-      if [ -n "$_hermes_cdp_url" ]; then
-        export BROWSER_CDP_URL="$_hermes_cdp_url"
-        # Marks BROWSER_CDP_URL as this wrapper's own default, so the lazy
-        # launch in browser.nix still runs and can make it live.
-        export HERMES_BROWSER_CDP_AUTO=1
-      fi
-    fi
-  '';
+  # No --run hook: Hermes starts its own packaged Chromium on demand the first
+  # time browser_exec runs (tools/browser_use_cli.py:_resolve_managed_chromium_cdp,
+  # via agent-browser). Exporting a CDP URL here instead points Hermes at a
+  # Chromium nothing starts, and suppresses that on-demand launch.
 
   inherit (pkgs.callPackage ./voice.nix { inherit pkgsHermesRev; })
     hermes-voice-dependencies piperVoiceDir piperVoiceName
@@ -63,42 +48,58 @@ let
     ]
     ++ [ xclip xsel ];
 
+  # Mirrors upstream's own "full" package (nix/packages.nix) minus
+  # edge-tts/tts-premium, since Piper replaces the cloud TTS backends here.
+  # checks/extras.nix verifies every requirement of these groups is installed.
+  extraDependencyGroups = [
+    "anthropic"
+    "azure-identity"
+    "bedrock"
+    "daytona"
+    "dingtalk"
+    "exa"
+    "fal"
+    "feishu"
+    "firecrawl"
+    "modal"
+    "parallel-web"
+    "vercel"
+  ]
+  ++ lib.optionals withVoice [ "voice" ]
+  # computer-use already in "all"; kept explicit to match upstream's name.
+  ++ lib.optionals withBrowser [ "computer-use" ]
+  ++ lib.optionals withGateway ([ "messaging" ] ++ lib.optionals stdenv.hostPlatform.isLinux [ "matrix" ]);
+
   base = hermes.minimal.override {
-    # Mirrors upstream's own "full" package (nix/packages.nix) minus
-    # edge-tts/tts-premium, since Piper replaces the cloud TTS backends here.
-    extraDependencyGroups = [
-      "anthropic"
-      "azure-identity"
-      "bedrock"
-      "daytona"
-      "dingtalk"
-      "exa"
-      "fal"
-      "feishu"
-      "firecrawl"
-      "modal"
-      "parallel-web"
-      "vercel"
-    ]
-    ++ lib.optionals withVoice [ "voice" ]
-    # computer-use already in "all"; kept explicit to match upstream's name.
-    ++ lib.optionals withBrowser [ "computer-use" ]
-    ++ lib.optionals withGateway ([ "messaging" ] ++ lib.optionals stdenv.isLinux [ "matrix" ]);
+    inherit extraDependencyGroups;
     extraPythonPackages = lib.optionals withVoice hermes-voice-dependencies;
   };
 
   # self closes the loop: hermesDesktop must reference THIS wrapped binary,
   # not the pre-wrap base. Lazy evaluation ensures self is fully defined when forced.
+  browserWrapArgs = lib.optionalString withBrowser
+    "--set-default AGENT_BROWSER_EXECUTABLE_PATH ${chromium}/bin/chromium";
+
+  # No self-update, telemetry or runtime installs (ADR-0002, lib/hardening.nix).
+  hardening = import ./lib/hardening.nix { inherit lib; };
+  hardeningWrapArgs = hardening.toWrapperArgsString hardening.env.hermes;
+  # config.yaml-only switches, installed for profiles to merge in.
+  hardenedConfig = (pkgs.formats.yaml { }).generate "hermes-hardened-config.yaml" hardening.hermesConfig;
+
   self = base.overrideAttrs (old: {
     nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ makeWrapper ];
 
+    # AGENT_BROWSER_EXECUTABLE_PATH in Hermes's OWN env is what stops its package manager from
+    # downloading a generic Chromium into HERMES_HOME/tools (tools/browser_tool_install.py
+    # _maybe_autoinstall_chromium); --set-default keeps a user override working.
     postFixup = ''
       ${old.postFixup or ""}
       for bin in hermes hermes-agent hermes-acp; do
         wrapProgram "$out/bin/$bin" \
-          --suffix PATH : "${lib.makeBinPath extraPathTools}" \
-          ${lib.optionalString withBrowser "--run ${lib.escapeShellArg browserCdpAutoRun}"}
+          --suffix PATH : "${lib.makeBinPath extraPathTools}" ${browserWrapArgs} ${hardeningWrapArgs}
       done
+      mkdir -p "$out/share/hermes-agent"
+      ln -s ${hardenedConfig} "$out/share/hermes-agent/hardened-config.yaml"
     ''
     # Baked into $out as actual build inputs, not just inert metadata.
     + lib.optionalString withVoice ''
@@ -112,6 +113,10 @@ let
         fasterWhisperModelPath = "${fasterWhisperModelDir}";
       }
       // {
+        # What the wrappers add, exposed for checks/wrapper-toggles.nix.
+        pathTools = extraPathTools;
+        inherit browserWrapArgs extraDependencyGroups hardenedConfig;
+        hardeningEnv = hardening.env.hermes;
         # Lazy — merely naming this attribute doesn't force building the
         # Electron app; only dereferencing its store path does (which
         # `final` below does, and only when withDesktop is true).

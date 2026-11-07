@@ -1,0 +1,17 @@
+[package]
+name = "toon"
+description = "TOON (Token-Oriented Object Notation) codec for JSON values; ported from toon-format/toon-rust v0.5.0"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+# Ported from toon-format/toon-rust v0.5.0 (MIT) via a private project's toon-format crate (MIT):
+# the crate keeps that license; the rest of the workspace is GPL-3.0-or-later.
+license = "MIT"
+
+[lib]
+name = "toon"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true

@@ -1,0 +1,64 @@
+version: "3"
+
+silent: true
+
+# Included from the root Taskfile as pkg:likec4; builds through the root flake.
+# Deliberately no publish task: `likec4 publish` ships the model to LikeC4 Cloud,
+# and the wrapper (bin/likec4.sh) refuses that subcommand.
+vars:
+  DEF: "{{.TASKFILE_DIR}}/default.nix"
+  PKGJSON: "{{.TASKFILE_DIR}}/package.json"
+  ATTR: "{{.ROOT_DIR}}#likec4"
+
+tasks:
+  build:
+    desc: "Build likec4"
+    cmds:
+      - nix build "{{.ATTR}}" --no-link
+
+  test:
+    desc: "Run likec4's smoke test (passthru.tests.smoke: CLI, MCP, vitest, hooks, Emacs mode)"
+    cmds:
+      - nix build "{{.ATTR}}.passthru.tests.smoke" --no-link
+
+  check-update:
+    desc: "Exit 0 if npm has a newer version; exit 1 if current; exit 2 on errors"
+    cmds:
+      - |
+        set -euo pipefail
+        REMOTE="$(curl -fsSL 'https://registry.npmjs.org/likec4/latest' | jq -r '.version')"
+        LOCAL="$(grep -m1 '^  version = ' "{{.DEF}}" | sed -E 's/^  version = "([^"]*)";$/\1/')"
+        if [ -z "$REMOTE" ] || [ -z "$LOCAL" ]; then
+          echo "[-] check-update: could not read versions (local='$LOCAL' remote='$REMOTE')" >&2; exit 2
+        fi
+        if [ "$REMOTE" = "$LOCAL" ]; then echo "[*] check-update: likec4 up to date ($LOCAL)"; exit 1; fi
+        echo "[*] check-update: likec4 $LOCAL -> $REMOTE"
+
+  update:
+    desc: "Bump to the latest npm version, regenerate the lock and npmDepsHash, build, test"
+    cmds:
+      - |
+        set -euo pipefail
+        V="${VERSION:-$(curl -fsSL 'https://registry.npmjs.org/likec4/latest' | jq -r '.version')}"
+        [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "[-] update: unexpected version '$V'" >&2; exit 2; }
+        # Values travel in the environment, never spliced into the perl program text.
+        V="$V" perl -i -pe 's/^  version = "[^"]*";/  version = "$ENV{V}";/' "{{.DEF}}"
+        V="$V" perl -i -pe 's/"likec4": "[^"]*"/"likec4": "$ENV{V}"/' "{{.PKGJSON}}"
+        echo "[*] update: likec4 $V"
+      - task: lock
+      - task: build
+      - task: test
+
+  lock:
+    desc: >-
+      Regenerate package-lock.json (no install scripts) with the flake's own node,
+      then npmDepsHash. The Playwright overrides must equal nixpkgs
+      playwright-driver (asserted in default.nix).
+    cmds:
+      - |
+        set -euo pipefail
+        nix shell --inputs-from "{{.ROOT_DIR}}" nixpkgs#nodejs_24 -c \
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+        H="$(nix shell --inputs-from "{{.ROOT_DIR}}" nixpkgs#prefetch-npm-deps -c prefetch-npm-deps package-lock.json)"
+        H="$H" perl -i -pe 's|npmDepsHash = "sha256-[^"]+";|npmDepsHash = "$ENV{H}";|' "{{.DEF}}"
+        echo "[+] lock: npmDepsHash=$H"

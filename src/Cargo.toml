@@ -1,0 +1,20 @@
+# One workspace for every first-party Rust project (ADR-0001, ADR-0004):
+# one Cargo.lock, one cargoLock in Nix, shared crates.
+[workspace]
+resolver = "2"
+members = ["slack", "tmpmail", "claude-usage", "gworkspace/api", "gworkspace/auth", "gworkspace/tools", "mcp", "mcp-serve", "voice", "mcp-filter", "mcp-tokens", "rafa-config", "toon"]
+
+[workspace.package]
+edition = "2021"
+license = "GPL-3.0-or-later"
+version = "0.1.0"
+rust-version = "1.85"
+
+[workspace.dependencies]
+globset = "0.4"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+serde_yaml_ng = "0.10"
+tiktoken-rs = "0.12"

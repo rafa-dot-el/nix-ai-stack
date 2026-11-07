@@ -1,0 +1,42 @@
+// Smoke-test workspace for packages/likec4 (passthru.tests.smoke).
+specification {
+  element actor
+  element system
+  element service
+  element database
+  relationship http-call
+  deploymentNode host
+}
+
+model {
+  user = actor 'User'
+  shop = system 'Shop' {
+    api = service 'API'
+    db = database 'DB'
+    api -[http-call]-> db 'reads'
+  }
+  user -[http-call]-> shop.api 'orders'
+}
+
+deployment {
+  prod = host 'prod' {
+    instanceOf shop.api
+    instanceOf shop.db
+  }
+}
+
+views {
+  view index {
+    title 'Index'
+    include *
+  }
+  deployment view prod_view {
+    title 'Production'
+    include prod, prod.**
+  }
+  dynamic view order_flow {
+    title 'Order'
+    user -> shop.api 'orders'
+    shop.api -> shop.db 'reads'
+  }
+}

@@ -57,11 +57,11 @@ let
   # sdist build instead.
   browserUseSdk = python3Packages.buildPythonPackage {
     pname = "browser-use-sdk";
-    version = "3.4.2";
+    version = "3.12.1";
     format = "pyproject";
     src = fetchurl {
-      url = "https://files.pythonhosted.org/packages/1d/f0/e897f4b75d76c96017f0cff4d7264426ae5f7e26ad68656e2731b9c166a7/browser_use_sdk-3.4.2.tar.gz";
-      hash = "sha256-vgULyAOzHsTp8j39cdncXxFg197AuWIyeRXK90OhAgg=";
+      url = "https://files.pythonhosted.org/packages/eb/3f/f315f76246b0793cbb287c5373541eaec86736cd6b7a25410c8664d7564e/browser_use_sdk-3.12.1.tar.gz";
+      hash = "sha256-lMKocOXsUHKyFmGm9P7L8QbavhxA6HkMZwIIHFLznS8=";
     };
     nativeBuildInputs = [ python3Packages.hatchling ];
     dependencies = with python3Packages; [ httpx pydantic ];
@@ -87,14 +87,18 @@ let
 
   browserHarness = python3Packages.buildPythonPackage {
     pname = "browser-harness";
-    version = "0.1.9";
+    version = "0.1.13";
     format = "pyproject";
     src = fetchFromGitHub {
       owner = "browser-use";
       repo = "browser-harness";
-      rev = "41108b8676d4bdb58b26ab3b079c0b7b0f8f3926"; # tag v0.1.9
-      hash = "sha256-jL9qpR9igfDgpybgsLTlgGaThRd4QTIdPoE9V6VtuGg=";
+      rev = "c24e5072ee66f8499bacd663f4f4bcb089bc4492"; # tag v0.1.13
+      hash = "sha256-sFg3eQnM5gOnESHsQGHi3hoeN5pjnmFAETgY61qBjI4=";
     };
+    # Upstream pins its build backend exactly; nixpkgs' setuptools builds it the same way.
+    postPatch = ''
+      substituteInPlace pyproject.toml --replace-fail '"setuptools==84.0.0"' '"setuptools"'
+    '';
     nativeBuildInputs = [ python3Packages.setuptools ];
     dependencies = with python3Packages; [ cdpUse fetchUse pillow websockets ];
     dontCheckRuntimeDeps = true;
@@ -123,6 +127,7 @@ let
     posthog
     psutil
     pydantic
+    pydantic-settings
     pyotp
     pypdf
     python-docx
@@ -143,54 +148,24 @@ let
   browserUsePythonPath = lib.makeSearchPath python3Packages.python.sitePackages
     (python3Packages.requiredPythonModules browserUseDeps);
 
-  browserEnsureDebug = pkgs.callPackage ./browser-cdp.nix { inherit chromium; };
-
-  # The real, lazy auto-launch trigger: this binary is only ever spawned as a
-  # fresh subprocess when Hermes's browser_exec tool actually runs (see
-  # tools/browser_use_cli.py:_find_cli/_route_backend in hermes-agent's own
-  # source), never at `hermes` process start — so hanging the probe-and-launch
-  # here (full mode: no `--print-only`) means Chromium only ever starts on
-  # real, first use. See browser-cdp.nix for what this backs off from and why
-  # a bare launch can't rely on browser-harness's own discovery here.
-  browserCdpAutoRun = ''
-    # Launch unless an operator override is set. A BROWSER_CDP_URL that the
-    # top-level --run hook exported (HERMES_BROWSER_CDP_AUTO) is not one.
-    # browser-harness reads BU_CDP_URL, so export both or the launch is wasted.
-    if [ -z "''${BU_CDP_URL:-}" ] && [ -z "''${BU_CDP_WS:-}" ] \
-       && { [ -z "''${BROWSER_CDP_URL:-}" ] || [ -n "''${HERMES_BROWSER_CDP_AUTO:-}" ]; }; then
-      _hermes_cdp_url="$(${browserEnsureDebug}/bin/hermes-ensure-browser-debug 2>/dev/null)" || _hermes_cdp_url=""
-      if [ -n "$_hermes_cdp_url" ]; then
-        export BROWSER_CDP_URL="$_hermes_cdp_url" BU_CDP_URL="$_hermes_cdp_url"
-      fi
-    fi
-  '';
-
   browserUse = python3Packages.buildPythonApplication {
     pname = "browser-use";
-    version = "0.13.8";
+    version = "0.13.14";
     format = "pyproject";
     src = fetchFromGitHub {
       owner = "browser-use";
       repo = "browser-use";
-      rev = "eb4126921bea3373f91afc49fb4b59d6eda7fed6"; # tag 0.13.8
-      hash = "sha256-ysHmVM2ImZb8CZUG5DTqx141MpnBfdPB8K37XdenvkM=";
+      rev = "2cc71890e65056b67fdb29d98bb407749c15bb08"; # tag 0.13.14
+      hash = "sha256-HrAxu6t//HIQmoeCkuwBZHUWWZayWD1SLcrSl6Od0Ps=";
     };
+    postPatch = ''
+      substituteInPlace pyproject.toml --replace-fail '"hatchling==1.32.0"' '"hatchling"'
+    '';
     nativeBuildInputs = [ python3Packages.hatchling makeWrapper ];
     dependencies = browserUseDeps;
     makeWrapperArgs = [ "--set" "PYTHONPATH" browserUsePythonPath ];
     dontCheckRuntimeDeps = true;
     doCheck = false;
-    # A second, explicit wrapProgram pass, not folded into makeWrapperArgs
-    # above: buildPythonApplication's own wrap-python-hook builds its
-    # wrapper via unquoted word-splitting internally, which chokes
-    # ("array assign: ... syntax error near unexpected token `&&'") on a
-    # multi-line --run script containing shell metacharacters. A plain
-    # postFixup wrapProgram call (same pattern as hermes/hermes-agent/
-    # hermes-acp in default.nix, and agent-browser below) re-wraps the
-    # already-wrapped binary safely instead.
-    postFixup = ''
-      wrapProgram "$out/bin/browser-use" --run ${lib.escapeShellArg browserCdpAutoRun}
-    '';
   };
 
   # buzz CLI is a Rust binary from block/buzz monorepo used by buzz/adapter.py.
@@ -277,21 +252,22 @@ let
 
   # agent-browser is the CDP CLI for browser_tool.py's built-in browser toolset.
   # Built from source (Rust, Apache-2.0, no git deps). AGENT_BROWSER_EXECUTABLE_PATH
-  # wired to the given chromium.
+  # defaults to the given chromium; --set-default so Hermes's own value (and the
+  # user's override, which Hermes forwards) still wins.
   agentBrowserSrc = fetchFromGitHub {
     owner = "vercel-labs";
     repo = "agent-browser";
-    rev = "118af8eef1eebe21b949c3cf677d468330da7a46"; # v0.35.2
-    hash = "sha256-7fNCG3Gu8a/93suVyDSxsOY2olWjPBaCDr8zvHrcWuY=";
+    rev = "1453dd37a40c730fe00f592bc32198a896ff8747"; # v0.41.0
+    hash = "sha256-siJ37qavluO6psfgaNTFkOSmL5f+PATFlPNWS7PXF6U=";
   };
   agentBrowser = rustPlatform.buildRustPackage {
     pname = "agent-browser";
-    version = "0.35.2";
+    version = "0.41.0";
     src = "${agentBrowserSrc}/cli";
     cargoLock.lockFile = "${agentBrowserSrc}/cli/Cargo.lock";
     doCheck = false;
     postFixup = ''
-      wrapProgram "$out/bin/agent-browser" --set AGENT_BROWSER_EXECUTABLE_PATH "${chromium}/bin/chromium"
+      wrapProgram "$out/bin/agent-browser" --set-default AGENT_BROWSER_EXECUTABLE_PATH "${chromium}/bin/chromium"
     '';
     nativeBuildInputs = [ makeWrapper ];
   };

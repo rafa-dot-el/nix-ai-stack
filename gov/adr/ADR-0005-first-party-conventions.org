@@ -1,0 +1,35 @@
+#+title: ADR-0005 First-party tools share config, secret, socket and annotation conventions
+:PROPERTIES:
+:STATUS:        Proposed
+:DATE:          2026-10-31
+:SUPERSEDES:
+:SUPERSEDED_BY:
+:REQUIREMENTS:  NFR-SEC.P03 NFR-OPS.01
+:COMMITS:
+:END:
+
+* Context
+The imported tools each invent their own config: env-only (mcp-slack), a single credentials file read by two tools (slack-send-draft), pickled OAuth tokens per Google service, a YAML under a project-specific namespace (gsuite), pass entries named after a private context. Visibility is filtered in three different ways (mcp-filter profiles, gsuite tag profiles, none).
+
+* Decision
+Every first-party tool:
+- reads =~/.config/rafa/<tool>.yaml= (project override =.rafa/<tool>.yaml=, explicit), with a =version:= key and =${XDG_*}=/=${HOME}= expansion, through the shared =rafa-config= crate (Python tools follow the same schema);
+- references secrets only as ={ file: ... }= or ={ command: [...] }=, never inline;
+- serves MCP over stdio and over a socket (=serve --socket=, =serve --systemd-socket=);
+- annotates tools with standard MCP =readOnlyHint= / =destructiveHint= so =mcp= rules can filter on them;
+- uses the shared voice (=~/.config/rafa/voice.yaml=) for any TTS/STT.
+
+* Change
+#+begin_src yaml
+version: 1
+credentials:
+  token: { command: [pass, show, slack/token] }
+  client_secret: { file: ${CREDENTIALS_DIRECTORY}/client-secret }
+#+end_src
+
+* Alternatives
+- Keep per-tool formats: every tool needs its own docs, module code and secret handling; rejected.
+- Tag profiles per tool (gsuite): duplicates =mcp= filtering; rejected in favour of annotations.
+
+* Consequences
+- One loader, one secret resolver, one module pattern; the Google tag profiles go away.

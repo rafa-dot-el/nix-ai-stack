@@ -1,0 +1,51 @@
+version: "3"
+
+silent: true
+
+# Included from the root Taskfile as pkg:claude-agent-acp; builds through the root flake.
+vars:
+  DEF: "{{.TASKFILE_DIR}}/default.nix"
+  ATTR: "{{.ROOT_DIR}}#claude-agent-acp"
+  REPO: agentclientprotocol/claude-agent-acp
+
+tasks:
+  build:
+    desc: "Build claude-agent-acp"
+    cmds:
+      - nix build "{{.ATTR}}" --no-link
+
+  test:
+    desc: "Build claude-agent-acp's smoke test (passthru.tests.smoke)"
+    cmds:
+      - nix build "{{.ATTR}}.passthru.tests.smoke" --no-link
+
+  check-update:
+    desc: "Exit 0 if GitHub has a newer release; exit 1 if current; exit 2 on errors"
+    cmds:
+      - |
+        set -euo pipefail
+        LOCAL="$(grep -m1 '^  version = ' "{{.DEF}}" | sed -E 's/^  version = "([^"]*)";$/\1/')"
+        REMOTE="$(gh api "repos/{{.REPO}}/releases/latest" --jq '.tag_name | ltrimstr("v")')"
+        if [ -z "$REMOTE" ] || [ -z "$LOCAL" ]; then
+          echo "[-] check-update: could not read versions (local='$LOCAL' remote='$REMOTE')" >&2; exit 2
+        fi
+        if [ "$REMOTE" = "$LOCAL" ]; then echo "[*] check-update: claude-agent-acp up to date ($LOCAL)"; exit 1; fi
+        echo "[*] check-update: claude-agent-acp $LOCAL -> $REMOTE"
+
+  update:
+    desc: "Bump to the latest release: source hash, then npmDepsHash from the failed build, then build and test"
+    cmds:
+      - |
+        set -euo pipefail
+        V="${VERSION:-$(gh api "repos/{{.REPO}}/releases/latest" --jq '.tag_name | ltrimstr("v")')}"
+        [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "[-] update: unexpected version '$V'" >&2; exit 2; }
+        H="$(nix store prefetch-file --unpack --json "https://github.com/{{.REPO}}/archive/refs/tags/v$V.tar.gz" | jq -r .hash)"
+        V="$V" perl -i -pe 's/^  version = "[^"]*";/  version = "$ENV{V}";/' "{{.DEF}}"
+        H="$H" perl -i -pe 's|^    hash = "sha256[^"]*";|    hash = "$ENV{H}";|' "{{.DEF}}"
+        perl -i -pe 's|^  npmDepsHash = "[^"]*";|  npmDepsHash = "";|' "{{.DEF}}"
+        D="$(nix build "{{.ATTR}}" --no-link 2>&1 | grep -oE 'got: +sha256-[A-Za-z0-9+/=]+' | awk '{print $2}' | head -1 || true)"
+        [ -n "$D" ] || { echo "[-] update: could not read the npm dependency hash" >&2; exit 2; }
+        D="$D" perl -i -pe 's|^  npmDepsHash = "";|  npmDepsHash = "$ENV{D}";|' "{{.DEF}}"
+        echo "[+] update: claude-agent-acp $V (src $H, npm $D)"
+      - task: build
+      - task: test

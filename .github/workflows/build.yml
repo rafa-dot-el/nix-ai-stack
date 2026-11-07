@@ -35,14 +35,27 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
-      - name: Lint Nix files
-        run: nix-instantiate --parse flake.nix default.nix >/dev/null
+      # Every step goes through the Taskfile, run from the flake's locked dev shell.
+      - name: Lint (every .nix file + actionlint)
+        run: nix develop .#default -c task lint
+
+      - name: Inputs follow one nixpkgs per channel
+        run: nix develop .#default -c task check:inputs
+
+      - name: Unit tests
+        run: nix develop .#default -c task test:unit
 
       - name: Check instantiation
-        run: nix eval --raw .#default.drvPath >/dev/null
+        run: nix develop .#default -c task check
 
       - name: Build package
         run: nix build .#default --no-link
+
+      - name: Flake checks
+        run: nix develop .#default -c task test
+
+      - name: Integration tests (offline subset)
+        run: nix develop .#default -c task test:integration -- -m "not network"
 
       - name: Push to Cachix
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))

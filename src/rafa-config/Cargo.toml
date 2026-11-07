@@ -1,0 +1,12 @@
+[package]
+name = "rafa-config"
+description = "Layered ~/.config/rafa/<tool>.yaml loading: expansion, drop-ins, origins, secret references"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_yaml_ng.workspace = true
+thiserror.workspace = true

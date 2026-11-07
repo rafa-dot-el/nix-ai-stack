@@ -1,0 +1,36 @@
+#+title: Architecture — nix-ai-stack
+#+date: <2026-10-31>
+#+filetags: :architecture:governance:
+
+A Nix flake that packages a personal AI stack: coding agents (Claude, Goose, Hermes, Antigravity), generic AI tools, first-party MCP servers, a local inference runtime, and one MCP proxy that every agent talks to. The thesis: agents, tools and MCP servers are configured once, declaratively, hardened against self-update and telemetry, and reached through a single filtered MCP entry point.
+
+* System Overview
+Consumers are NixOS and Home Manager configurations (first: the author's NixOS configuration repository). They import =nixosModules.default= / =homeManagerModules.default= and set options under =rafa.ai=. Packages are also usable directly from =packages.<system>.*= and =overlays.default= (=pkgs.rafa.ai.*=).
+
+* Components
+| Component | Kind | Responsibility |
+|---|---|---|
+| =packages/<name>= | third-party packaging | Build or repack an upstream tool with a hardened wrapper |
+| =src/<project>= | first-party code | MCP servers and CLIs (Rust workspace + two Python projects) |
+| =lib/= | pure Nix | hardening env, MCP config/unit rendering, voice config |
+| =modules/home=, =modules/nixos= | modules | the =rafa.ai= option trees |
+| Hermes (=default.nix=, =browser.nix=, =voice.nix=, =desktop.nix=, =nixos/=) | package + module | the flagship agent, unchanged layout |
+
+* Communication
+agent → stdio → =mcp client= → unix socket → =mcp proxy= → unix socket (socket-activated) → MCP server service. Details in [[file:adr/ADR-0004-mcp-proxy-architecture.org][ADR-0004]].
+
+* Technology Stack
+Nix flakes (nixos-26.05 + nixos-unstable), Taskfile, Rust (rmcp, tokio, ratatui) for first-party MCP code, Python (uv2nix) for calibrectl/zoteroctl, systemd user units for services.
+
+* Model
+[gap: LikeC4 model not yet created; planned once the =mcp= components exist (M6).]
+
+* Decisions (ADR index)
+| ADR | Title | Status |
+|---|---|---|
+| [[file:adr/ADR-0001-ai-stack-monorepo.org][0001]] | nix-hermes becomes the nix-ai-stack monorepo | Proposed |
+| [[file:adr/ADR-0002-no-self-update-no-telemetry.org][0002]] | Every packaged tool ships with self-update and telemetry disabled | Proposed |
+| [[file:adr/ADR-0003-first-party-import.org][0003]] | First-party code is imported with fresh history | Proposed |
+| [[file:adr/ADR-0004-mcp-proxy-architecture.org][0004]] | One Rust =mcp= binary: client, proxy, socket-activated servers, layered YAML | Proposed |
+| [[file:adr/ADR-0005-first-party-conventions.org][0005]] | First-party tools share config, secret, socket and annotation conventions | Proposed |
+| [[file:adr/ADR-0006-rafa-ai-option-tree.org][0006]] | Modules expose one =rafa.ai= tree grouped by agents, tools, mcp, runtimes, voice | Proposed |

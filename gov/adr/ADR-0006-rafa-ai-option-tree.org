@@ -1,0 +1,30 @@
+#+title: ADR-0006 Modules expose one rafa.ai tree grouped by agents, tools, mcp, runtimes, voice
+:PROPERTIES:
+:STATUS:        Proposed
+:DATE:          2026-10-31
+:SUPERSEDES:
+:SUPERSEDED_BY:
+:REQUIREMENTS:  FR02.1
+:COMMITS:
+:END:
+
+* Context
+The flake exposes =services.hermes-agent= (NixOS) and re-exports upstream's Home Manager module. the author's NixOS configuration repository wires the other AI packages by hand into package lists, and MCP daemons through per-project HM modules under an =mcp.*= namespace.
+
+* Decision
+Both module systems expose =rafa.ai= with the same shape: =hardening=, =voice=, =agents.<agent>= (one root =enable= per agent; sub-components default to =mkDefault <agent>.enable=; long-running services such as the Claude usage exporter or the Hermes server never default on), =tools= (generic tools usable by any agent), =mcp= (proxy, profiles, servers) and, on NixOS, =runtimes= (ollama). =services.hermes-agent= becomes =rafa.ai.agents.hermes.server= with a =mkRenamedOptionModule= alias.
+
+* Change
+#+begin_src nix
+rafa.ai.agents.claude = { enable = true; };   # => code + acp + desktop + usage (CLI); exporter stays off
+rafa.ai.agents.goose.enable = true;           # => cli + desktop
+rafa.ai.mcp.servers.slack.enable = true;      # => mcp-slack.socket + mcp-slack.service
+#+end_src
+
+* Alternatives
+- Flat =programs.*=/=services.*= options per package: no "enable the Claude stack" switch, names collide with Home Manager upstream modules; rejected.
+- Grouping tools under agents: plannotator/openspec/likec4 serve every agent; rejected.
+
+* Consequences
+- Eval tests per root switch pin the default sets.
+- The rename needs one release cycle with the alias before =services.hermes-agent= is removed.

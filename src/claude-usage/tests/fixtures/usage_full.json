@@ -1,0 +1,98 @@
+{
+  "five_hour": {
+    "utilization": 36.2,
+    "resets_at": "2026-07-12T18:40:00Z",
+    "limit_dollars": 5.0,
+    "used_dollars": 1.81,
+    "remaining_dollars": 3.19
+  },
+  "seven_day": {
+    "utilization": 11.4,
+    "resets_at": "2026-07-17T00:00:00Z",
+    "limit_dollars": 50.0,
+    "used_dollars": 5.7,
+    "remaining_dollars": 44.3
+  },
+  "seven_day_oauth_apps": null,
+  "seven_day_opus": null,
+  "seven_day_sonnet": {
+    "utilization": 8.5,
+    "resets_at": "2026-07-17T00:00:00Z",
+    "limit_dollars": null,
+    "used_dollars": null,
+    "remaining_dollars": null
+  },
+  "seven_day_cowork": null,
+  "seven_day_omelette": null,
+  "tangelo": null,
+  "iguana_necktie": null,
+  "omelette_promotional": null,
+  "nimbus_quill": null,
+  "cinder_cove": null,
+  "amber_ladder": null,
+  "extra_usage": {
+    "is_enabled": false,
+    "monthly_limit": 100.0,
+    "used_credits": 0.0,
+    "utilization": 0.0,
+    "currency": "USD",
+    "decimal_places": 2,
+    "disabled_reason": "not_enrolled",
+    "daily": null,
+    "weekly": null
+  },
+  "limits": [
+    {
+      "kind": "session",
+      "group": "five_hour",
+      "percent": 36.2,
+      "severity": "normal",
+      "resets_at": "2026-07-12T18:40:00Z",
+      "scope": null,
+      "is_active": true
+    },
+    {
+      "kind": "weekly_all",
+      "group": "seven_day",
+      "percent": 11.4,
+      "severity": "normal",
+      "resets_at": "2026-07-17T00:00:00Z",
+      "scope": null,
+      "is_active": true
+    },
+    {
+      "kind": "weekly_model",
+      "group": "seven_day",
+      "percent": 20.0,
+      "severity": "normal",
+      "resets_at": "2026-07-17T00:00:00Z",
+      "scope": {
+        "model": {
+          "id": "fable",
+          "display_name": "Fable"
+        },
+        "surface": null
+      },
+      "is_active": true
+    }
+  ],
+  "spend": {
+    "used": {
+      "amount_minor": 0,
+      "currency": "USD",
+      "exponent": 2
+    },
+    "limit": null,
+    "percent": 0.0,
+    "severity": "normal",
+    "enabled": false,
+    "disabled_reason": "not_enrolled",
+    "cap": null,
+    "balance": null,
+    "auto_reload": null,
+    "disclaimer": "Credits are non-refundable.",
+    "can_purchase_credits": true,
+    "can_toggle": true
+  },
+  "member_dashboard_available": true
+}

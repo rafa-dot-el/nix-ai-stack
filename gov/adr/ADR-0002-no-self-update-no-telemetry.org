@@ -1,0 +1,32 @@
+#+title: ADR-0002 Every packaged tool ships with self-update and telemetry disabled
+:PROPERTIES:
+:STATUS:        Proposed
+:DATE:          2026-10-31
+:SUPERSEDES:
+:SUPERSEDED_BY:
+:REQUIREMENTS:  NFR-SEC.P01 NFR-SEC.P02
+:COMMITS:
+:END:
+
+* Context
+Packaged tools phone home in different ways: auto-updaters (antigravity, claude-code plugins), PostHog/Sentry telemetry (browser-use, browser-harness, openspec, cua-driver, goose opt-in), update checks (likec4 every 24h, openspec, browser-harness), model catalogs (Hermes, goose =models.dev=), runtime installers (Hermes lazy installs, notebooklm =playwright install=). Some wrappers set variables the binary never reads (antigravity =ANTIGRAVITY_DISABLE_AUTOUPDATE=) or re-enable updates (claude-code =FORCE_AUTOUPDATE_PLUGINS=1=).
+
+* Decision
+Each package declares a =hardenedEnv= attrset in =lib/hardening.nix=; its wrapper flags are generated from it. Config-file switches ship as fragments and module defaults. Login/session traffic stays. Switches that would break a feature Rafael uses (Claude Code Remote Control) are not set. What cannot be disabled is listed in the docs. Source patches that remove behaviour need Rafael's explicit approval, except where nixpkgs already applies the same patch (goose-desktop =UPDATES_ENABLED=).
+
+* Change
+#+begin_src nix
+# lib/hardening.nix (pure)
+{ claude-code = { DISABLE_AUTOUPDATER = "1"; DISABLE_TELEMETRY = "1"; DISABLE_ERROR_REPORTING = "1"; ... };
+  antigravity-cli = { AGY_CLI_DISABLE_AUTO_UPDATE = "true"; };
+  ...; forbidden = [ "ANTIGRAVITY_DISABLE_AUTOUPDATE" "FORCE_AUTOUPDATE_PLUGINS" ]; }
+# per package: makeWrapperArgs = hardening.toWrapperArgs hardening.<name>;
+#+end_src
+
+* Alternatives
+- Network sandboxing (firejail/bwrap egress filtering): blocks session traffic as well and is host-specific; rejected for packaging, possible later as an option.
+- Leave defaults: violates NFR-SEC.P01.
+
+* Consequences
+- Three test layers: pure eval of the attrsets, grep of built wrappers, =strace -e connect= of =--version= in the build sandbox (startup only).
+- Every version bump re-runs the hardening checks; new upstream switches are added there.

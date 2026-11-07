@@ -1,0 +1,30 @@
+[package]
+name = "tmpmail"
+description = "Disposable GuerrillaMail inboxes: CLI and MCP server"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "tmpmail"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+mcp-serve = { path = "../mcp-serve" }
+rafa-config = { path = "../rafa-config" }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
+rmcp = { version = "3.8", default-features = false, features = ["server", "macros", "schemars", "transport-io", "transport-async-rw"] }
+schemars = "1"
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+rmcp = { version = "3.8", default-features = false, features = ["client", "server", "transport-async-rw", "transport-child-process"] }

@@ -1,0 +1,50 @@
+{
+  "five_hour": {
+    "utilization": 78.5,
+    "resets_at": "2026-07-12T22:15:00Z",
+    "limit_dollars": 5.0,
+    "used_dollars": 3.93,
+    "remaining_dollars": 1.07
+  },
+  "seven_day": {
+    "utilization": 65.0,
+    "resets_at": "2026-07-17T00:00:00Z",
+    "limit_dollars": 50.0,
+    "used_dollars": 32.5,
+    "remaining_dollars": 17.5
+  },
+  "seven_day_oauth_apps": null,
+  "seven_day_opus": null,
+  "seven_day_sonnet": null,
+  "seven_day_cowork": null,
+  "seven_day_omelette": null,
+  "tangelo": null,
+  "iguana_necktie": null,
+  "omelette_promotional": null,
+  "nimbus_quill": null,
+  "cinder_cove": null,
+  "amber_ladder": null,
+  "extra_usage": null,
+  "limits": [
+    {
+      "kind": "session",
+      "group": "five_hour",
+      "percent": 78.5,
+      "severity": "warning",
+      "resets_at": "2026-07-12T22:15:00Z",
+      "scope": null,
+      "is_active": true
+    },
+    {
+      "kind": "weekly_all",
+      "group": "seven_day",
+      "percent": 65.0,
+      "severity": "warning",
+      "resets_at": "2026-07-17T00:00:00Z",
+      "scope": null,
+      "is_active": true
+    }
+  ],
+  "spend": null,
+  "member_dashboard_available": true
+}

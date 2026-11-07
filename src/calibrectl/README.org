@@ -1,0 +1,99 @@
+#+title: calibrectl
+#+author: Rafael
+
+* Overview
+
+~calibrectl~ is a command-line tool for managing Calibre ebook libraries through
+direct database access. It provides CRUD operations on books, metadata management,
+file attachment handling, and comprehensive database diagnostics.
+
+* Environment Variables
+
+| Variable           | Description                                      | Default                          |
+|--------------------|--------------------------------------------------|----------------------------------|
+| ~CALIBRE_DATABASE~ | Path to Calibre ~metadata.db~ file              | ~~/Calibre Library/metadata.db~ |
+| ~CALIBRE_STORAGE~  | Path to Calibre storage directory               | Parent directory of database     |
+
+* Usage
+
+** Retrieve a book
+#+begin_src sh
+calibrectl get 42
+calibrectl --json-output get 42
+#+end_src
+
+** List books
+#+begin_src sh
+calibrectl list
+calibrectl list --author "Orwell" --limit 20
+calibrectl list --tag fiction --limit 50
+calibrectl list --title "Python"
+calibrectl --json-output list
+#+end_src
+
+** Run diagnostics
+#+begin_src sh
+calibrectl doctor
+calibrectl --json-output doctor
+#+end_src
+
+** Export to BibTeX
+#+begin_src sh
+calibrectl export-bibtex 42
+calibrectl export-bibtex --tag security --output refs.bib
+#+end_src
+
+** Find and fetch metadata
+#+begin_src sh
+calibrectl find-isbn 42
+calibrectl fetch-metadata 42
+#+end_src
+
+** Set a cover image
+#+begin_src sh
+calibrectl set-cover 42 /path/to/cover.jpg
+#+end_src
+
+** Tag maintenance
+#+begin_src sh
+calibrectl retag --dry-run
+calibrectl retag --mapping tag-mappings.yaml
+#+end_src
+
+** Deduplicate
+#+begin_src sh
+calibrectl dedupe --dry-run
+calibrectl dedupe --auto-delete
+#+end_src
+
+* Development
+
+** Setup
+#+begin_src sh
+task deps      # uv sync --all-groups
+task test      # run pytest
+task lint      # ruff check
+task all       # lint + type-check + test
+task build     # nix build .#default
+#+end_src
+
+** Project structure
+
+#+begin_example
+calibrectl/
+├── calibrectl/
+│   ├── __init__.py       version string
+│   ├── __main__.py       python -m calibrectl entry point
+│   ├── cli.py            Click root group and all subcommands
+│   ├── config.py         environment variable helpers
+│   ├── db.py             database connection and queries
+│   ├── formatters.py     output formatters and echo helpers
+│   ├── validation.py     pure validation functions
+│   ├── paths.py          path sanitization and helpers
+│   ├── bibtex.py         BibTeX export
+│   ├── isbn.py           ISBN extraction from PDF/EPUB
+│   ├── metadata.py       fetch-ebook-metadata subprocess wrapper
+│   ├── covers.py         cover image management
+│   └── maintenance.py    retag and dedupe logic
+└── tests/                pytest test suite
+#+end_example

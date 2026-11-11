@@ -113,7 +113,7 @@ tasks:
         echo "[+] check:inputs: every nixpkgs follows a root channel"
 
   build:
-    desc: "Build the default package (hermes CLI + TUI + web dashboard + ACP + TTS/STT) via this package's own flake"
+    desc: "Build the default package: Hermes (CLI + TUI + web dashboard + ACP + TTS/STT)"
     dir: "{{.TASKFILE_DIR}}"
     silent: true
     cmds:
@@ -211,8 +211,8 @@ tasks:
 
   cache:push:
     desc: >-
-      Build hermes-agent via its own standalone flake and push the
-      resulting store path to the rafa-dot-el Cachix cache. Reads the push
+      Build the default package (Hermes) and push the resulting store path
+      to the rafa-dot-el Cachix cache. Reads the push
       token from pass (code/cachix/tokens-main-ci); never persists it to
       disk.
     dir: "{{.TASKFILE_DIR}}"
@@ -223,11 +223,11 @@ tasks:
         echo "[*] Pushing $out to rafa-dot-el..."
         CACHIX_AUTH_TOKEN="$(pass show code/cachix/tokens-main-ci)" \
           nix run nixpkgs#cachix -- push rafa-dot-el "$out"
-        echo "[+] Pushed hermes-agent to rafa-dot-el"
+        echo "[+] Pushed the default package to rafa-dot-el"
 
   oci:build:
     desc: >-
-      Build the OCI image (rafadotel/hermes-agent) via dockerTools and load
+      Build the OCI image (rafadotel/ai) via dockerTools and load
       it into the local docker daemon. Pass TAG=vX.Y.Z to also tag that
       version (the leading "v" is stripped for the Docker tag); otherwise
       only :latest is tagged. Builds for the host's own architecture only —
@@ -240,15 +240,15 @@ tasks:
         set -euo pipefail
         out="$(nix build .#ociImage --no-link --print-out-paths)"
         docker load < "$out"
-        docker tag hermes-agent:latest rafadotel/hermes-agent:latest
+        docker tag ai:latest rafadotel/ai:latest
         if [ -n "${TAG:-}" ]; then
-          docker tag hermes-agent:latest "rafadotel/hermes-agent:${TAG#v}"
+          docker tag ai:latest "rafadotel/ai:${TAG#v}"
         fi
-        echo "[+] Loaded rafadotel/hermes-agent:latest${TAG:+ and :${TAG#v}}"
+        echo "[+] Loaded rafadotel/ai:latest${TAG:+ and :${TAG#v}}"
 
   oci:push:
     desc: >-
-      Build and push the OCI image to Docker Hub as rafadotel/hermes-agent.
+      Build and push the OCI image to Docker Hub as rafadotel/ai.
       Pass TAG=vX.Y.Z to also push that version tag. Reads the access token
       from pass (code/hub.docker.com-token); never persists it to disk.
     dir: "{{.TASKFILE_DIR}}"
@@ -258,11 +258,11 @@ tasks:
       - |
         set -euo pipefail
         pass show code/hub.docker.com-token | docker login -u rafadotel --password-stdin
-        docker push rafadotel/hermes-agent:latest
+        docker push rafadotel/ai:latest
         if [ -n "${TAG:-}" ]; then
-          docker push "rafadotel/hermes-agent:${TAG#v}"
+          docker push "rafadotel/ai:${TAG#v}"
         fi
-        echo "[+] Pushed rafadotel/hermes-agent:latest${TAG:+ and :${TAG#v}}"
+        echo "[+] Pushed rafadotel/ai:latest${TAG:+ and :${TAG#v}}"
 
   tag:
     desc: >-
@@ -296,7 +296,7 @@ tasks:
           --title "$TAG" \
           --generate-notes \
           --notes "Cachix cache: https://app.cachix.org/cache/rafa-dot-el#pull
-        Docker Hub image: https://hub.docker.com/r/rafadotel/hermes-agent (tag ${TAG#v})"
+        Docker Hub image: https://hub.docker.com/r/rafadotel/ai (tag ${TAG#v})"
         echo "[+] Released $TAG"
 
   clean:
@@ -308,9 +308,35 @@ tasks:
 
   check-update:
     desc: >-
+      Report the pinned vs latest version of Hermes and of every package. Exit
+      0 when any update is available, 1 when everything is current, 2 on errors.
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - |
+        set -uo pipefail
+        available=0
+        for t in hermes:check-update \
+                 pkg:claude-code:check-update pkg:claude-agent-acp:check-update \
+                 pkg:claude-desktop:check-update pkg:antigravity-cli:check-update \
+                 pkg:openspec:check-update pkg:plannotator:check-update \
+                 pkg:likec4:check-update pkg:notebooklm-py:check-update \
+                 pkg:patternfly-mcp:check-update; do
+          rc=0; out="$(task -x "$t" 2>&1)" || rc=$?
+          printf '%s\n' "$out" | grep -E 'check-update:' | grep -v 'Failed to run task' || true
+          case "$rc" in
+            0) available=1 ;;
+            1) ;;
+            *) echo "[-] $t failed (exit $rc)" >&2; exit 2 ;;
+          esac
+        done
+        [ "$available" -eq 1 ]
+
+  hermes:check-update:
+    desc: >-
       Compare the pinned upstream tag (flake.nix hermes-agent-src url) against
-      the latest published release of NousResearch/hermes-agent. Exit 2 when
-      an update is available.
+      the latest published release of NousResearch/hermes-agent. Exit 0 when an
+      update is available, 1 when current, 2 on errors.
     dir: "{{.TASKFILE_DIR}}"
     silent: true
     cmds:
@@ -324,13 +350,40 @@ tasks:
         # semver one. "Latest release" is ordered by publish date instead.
         LATEST="$(gh api repos/NousResearch/hermes-agent/releases/latest --jq .tag_name)"
         : "${LATEST:?could not resolve latest upstream release tag}"
-        echo "check-update: pinned=${PINNED} latest=${LATEST}"
         if [ "$PINNED" != "$LATEST" ]; then
-          echo "check-update: update available (${PINNED} -> ${LATEST})" >&2
-          exit 2
+          echo "[*] check-update: hermes ${PINNED} -> ${LATEST}"
+          exit 0
         fi
+        echo "[*] check-update: hermes up to date (${PINNED})"
+        exit 1
 
   update:
+    desc: >-
+      Bump Hermes and then every package to its latest upstream version (one
+      after another; each step builds and tests). Pass TAG=vX.Y.Z to pin Hermes
+      explicitly.
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - task: hermes:update
+      - task: update:packages
+
+  update:packages:
+    desc: "Bump every package under packages/ to its latest upstream version (build and test each)"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - task: pkg:claude-code:update
+      - task: pkg:claude-agent-acp:update
+      - task: pkg:claude-desktop:update
+      - task: pkg:antigravity-cli:update
+      - task: pkg:openspec:update
+      - task: pkg:plannotator:update
+      - task: pkg:likec4:update
+      - task: pkg:notebooklm-py:update
+      - task: pkg:patternfly-mcp:update
+
+  hermes:update:
     desc: >-
       Bump hermes-agent-src url to the latest upstream release, refresh
       flake.lock, then check+build. Pass TAG=vX.Y.Z to pin explicitly
@@ -376,7 +429,7 @@ tasks:
       - task: check:inputs
 
   update:nixpkgs:
-    desc: "Bump the stable nixpkgs (moves Chromium and every package; nixpkgs-unstable follows upstream Hermes via update)"
+    desc: "Bump the stable nixpkgs (moves Chromium and every package; nixpkgs-unstable follows upstream Hermes via hermes:update)"
     dir: "{{.TASKFILE_DIR}}"
     silent: true
     cmds:

@@ -108,12 +108,12 @@ jobs:
 
       - name: Tag and push
         run: |
-          docker tag hermes-agent:latest rafadotel/hermes-agent:latest
-          docker push rafadotel/hermes-agent:latest
+          docker tag ai:latest rafadotel/ai:latest
+          docker push rafadotel/ai:latest
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
-            docker tag hermes-agent:latest "rafadotel/hermes-agent:${VERSION}"
-            docker push "rafadotel/hermes-agent:${VERSION}"
+            docker tag ai:latest "rafadotel/ai:${VERSION}"
+            docker push "rafadotel/ai:${VERSION}"
           fi
 
   release:
@@ -134,7 +134,7 @@ jobs:
           DOCKER_TAG="${TAG#v}"
           NOTES="Cachix cache: https://app.cachix.org/cache/rafa-dot-el#pull"
           NOTES="${NOTES}
-          Docker Hub image: https://hub.docker.com/r/rafadotel/hermes-agent (tag ${DOCKER_TAG})"
+          Docker Hub image: https://hub.docker.com/r/rafadotel/ai (tag ${DOCKER_TAG})"
           gh release create "$TAG" \
             --title "$TAG" \
             --generate-notes \

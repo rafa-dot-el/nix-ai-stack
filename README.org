@@ -34,7 +34,7 @@ are also available as =packages.<system>.*= and through =overlays.default=
 | =claude-code=, =claude-agent-acp= | Claude Code and its ACP adapter | =agents.claude.enable= |
 | =claude-desktop=, =claude-desktop-fhs= | Claude Desktop; the FHS variant runs npx/uvx/docker MCP servers | =agents.claude.desktop.fhs= |
 | =claude-usage= | Claude plan usage: CLI, polybar format, Prometheus exporter | =agents.claude.usage= |
-| =goose-cli=, =goose-desktop= | goose; telemetry forced off, desktop updater patched off | package only, no module yet |
+| =goose-cli=, =goose-desktop= | goose; telemetry forced off, desktop updater patched off | =agents.goose.enable= (cli + desktop) |
 | =antigravity-cli= | the =agy= CLI | =agents.antigravity.enable= |
 | =ollama=, =-rocm=, =-cuda=, =-vulkan= | ollama; no models shipped | NixOS: =runtimes.ollama= |
 
@@ -90,6 +90,7 @@ Add =nix-ai-stack.nixosModules.default= to a NixOS configuration and
   rafa.ai = {
     agents.claude.enable = true;        # code + acp + desktop + usage (CLI, polybar)
     agents.hermes.enable = true;        # CLI, TUI, ACP, desktop, hardened config fragment
+    agents.goose.enable = true;         # goose-cli + goose-desktop
     agents.antigravity.enable = true;
 
     tools = {

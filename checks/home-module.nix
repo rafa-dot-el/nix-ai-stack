@@ -22,6 +22,8 @@ let
   claude = eval { rafa.ai.agents.claude.enable = true; };
   claudeFhs = eval { rafa.ai.agents.claude = { enable = true; desktop.fhs = true; }; };
   claudeNoDesktop = eval { rafa.ai.agents.claude = { enable = true; desktop.enable = false; }; };
+  goose = eval { rafa.ai.agents.goose.enable = true; };
+  gooseCliOnly = eval { rafa.ai.agents.goose = { enable = true; desktop.enable = false; }; };
   hermes = eval { rafa.ai.agents.hermes.enable = true; };
   hermesUnhardened = eval { rafa.ai.agents.hermes.enable = true; rafa.ai.hardening.enable = false; };
   tools = eval { rafa.ai.tools = { openspec.enable = true; likec4.enable = true; }; };
@@ -142,6 +144,12 @@ let
       has claudeFhs packages.claude-desktop-fhs && !(has claudeFhs packages.claude-desktop);
     "a sub-option can be turned off under the root switch" =
       has claudeNoDesktop packages.claude-code && !(has claudeNoDesktop packages.claude-desktop);
+    "goose root switch installs the CLI and the desktop app" =
+      has goose packages.goose-cli && has goose packages.goose-desktop;
+    "goose: a sub-option can be turned off under the root switch" =
+      has gooseCliOnly packages.goose-cli && !(has gooseCliOnly packages.goose-desktop);
+    "goose: installing starts nothing" = (units goose).services == { } && (units goose).sockets == { };
+    "goose is opt-in" = !(has none packages.goose-cli) && !(has none packages.goose-desktop);
     "hermes root switch installs hermes" = has hermes packages.default;
     "hermes ships the hardened config fragment" =
       hermes.xdg.dataFile ? "rafa/hermes/hardened-config.yaml";

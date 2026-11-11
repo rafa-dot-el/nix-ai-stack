@@ -45,6 +45,8 @@ tasks:
         if ! [[ "$REMOTE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
           echo "[-] update: unexpected version '${REMOTE}'" >&2; exit 2
         fi
+        # Same bucket content as downloads.claude.ai (manifest sha256 matches); see default.nix.
+        # The prefetched hash is what the build pins, so a different binary fails the build.
         URL="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/${REMOTE}/linux-x64/claude"
         HASH="$(nix store prefetch-file --json "$URL" | jq -r .hash)"
         V="$REMOTE" perl -i -pe 's/^  version = "[^"]*";/  version = "$ENV{V}";/' "{{.DEF}}"

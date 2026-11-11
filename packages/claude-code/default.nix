@@ -11,6 +11,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "claude-code";
   version = "2.1.322";
 
+  # Same binary as downloads.claude.ai (claude.ai/install.sh): its manifest sha256 equals this hash (2.1.322, 2026-11-11).
+  # The bucket name is undocumented; the hash pin is the guard.
   src = fetchurl {
     url = "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/${finalAttrs.version}/linux-x64/claude";
     hash = "sha256-v7NwOtU4AkIyhFm8Yq2kveiue6V8bh7q25wA4Ih0xHg=";

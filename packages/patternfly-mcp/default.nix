@@ -7,17 +7,17 @@
 # fetch PatternFly docs from raw.githubusercontent.com when a tool asks for them.
 buildNpmPackage (finalAttrs: {
   pname = "patternfly-mcp";
-  version = "2.5.0";
+  version = "2.6.0";
 
   src = fetchFromGitHub {
     owner = "patternfly";
     repo = "patternfly-mcp";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-iJDn1n4W6jW3WTEd9cXfwP+WVbWOcIOjXDnsI0yGPe8=";
+    hash = "sha256-ZJWfV7mll5GE7rNICZGdk2Q6SBoCbxqSG6Wc0upZwd0=";
   };
 
   nodejs = nodejs_22;
-  npmDepsHash = "sha256-NcP+Pl0GT86UMsJ95kMbwxrT9aL84X/Xj0OGO6kboSs=";
+  npmDepsHash = "sha256-Q4f3EG2wHBiBsoP1ZX5YuYxyHtqAVDdtGgfzQV3eTQ0=";
 
   # The lock does not pin an optional eslint peer, which npm otherwise tries to
   # resolve from the registry (ENOTCACHED offline).

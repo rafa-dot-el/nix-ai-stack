@@ -267,7 +267,7 @@ tasks:
     dir: "{{.TASKFILE_DIR}}"
     silent: true
     cmds:
-      - nix develop .#itest -c pytest tests/unit tests/integration/test_mock_openai.py -v {{.CLI_ARGS}}
+      - nix develop .#itest -c pytest tests/unit tests/integration/test_mock_openai.py tests/integration/test_browser_helpers.py -v {{.CLI_ARGS}}
 
   test:integration:
     desc: "Run hermes-acp against the mock OpenAI backend (browser_exec drives a headless Chromium)"

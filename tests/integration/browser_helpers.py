@@ -22,9 +22,19 @@ def tool_message(request) -> str:
     return [m for m in request.body["messages"] if m["role"] == "tool"][-1]["content"]
 
 
+def browser_argvs(argvs: list) -> list:
+    """The browser processes among `argvs`: has a profile dir and is not a Chromium child (--type=utility, renderer, gpu).
+
+    Children carry --user-data-dir too but never --headless, so counting them fails the headless check at random.
+    """
+    return [
+        argv for argv in argvs
+        if any(a.startswith("--user-data-dir=") for a in argv) and not any(a.startswith("--type=") for a in argv)
+    ]
+
+
 def _chromium_argvs(client) -> list:
-    argvs = [argv_of(pid) for pid in pids_for_session(client.env["HOME"])]
-    return [argv for argv in argvs if any(a.startswith("--user-data-dir=") for a in argv)]
+    return browser_argvs([argv_of(pid) for pid in pids_for_session(client.env["HOME"])])
 
 
 @contextmanager

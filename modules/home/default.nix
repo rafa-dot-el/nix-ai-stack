@@ -99,6 +99,12 @@ in
         };
       };
 
+      goose = {
+        enable = mkEnableOption "goose: the CLI and the desktop app";
+        cli = component "goose-cli" cfg.agents.goose.enable packages.goose-cli;
+        desktop = component "goose-desktop (the Electron app)" cfg.agents.goose.enable packages.goose-desktop;
+      };
+
       antigravity = {
         enable = mkEnableOption "the Antigravity CLI";
         cli = component "antigravity-cli (agy)" cfg.agents.antigravity.enable packages.antigravity-cli;
@@ -157,6 +163,8 @@ in
       ++ optional a.claude.desktop.enable
         (if a.claude.desktop.fhs then packages.claude-desktop-fhs else a.claude.desktop.package)
       ++ optional a.hermes.enable a.hermes.package
+      ++ optional a.goose.cli.enable a.goose.cli.package
+      ++ optional a.goose.desktop.enable a.goose.desktop.package
       ++ optional a.antigravity.cli.enable a.antigravity.cli.package
       ++ lib.concatMap (name: optional t.${name}.enable t.${name}.package) (lib.attrNames t);
 

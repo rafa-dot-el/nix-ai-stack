@@ -25,34 +25,40 @@ let
   hermes = eval { rafa.ai.agents.hermes.enable = true; };
   hermesUnhardened = eval { rafa.ai.agents.hermes.enable = true; rafa.ai.hardening.enable = false; };
   tools = eval { rafa.ai.tools = { openspec.enable = true; likec4.enable = true; }; };
-  mcpOff = eval { rafa.ai.mcp.servers.playwright.enable = true; rafa.ai.voice.enable = false; };
+  # A server without the proxy: its own units, nothing else of the mcp stack.
+  serverOnly = eval { rafa.ai.tools.playwright.server.enable = true; rafa.ai.voice.enable = false; };
+  cliOnly = eval { rafa.ai.tools = { slack.enable = true; gworkspace.enable = true; tmpmail.enable = true; playwright.enable = true; }; };
+  slCustom = eval { rafa.ai.tools.slack.server = { enable = true; listen.socket = "%t/custom/slack.sock"; }; };
   mcp = eval {
     rafa.ai.mcp = {
       enable = true;
-      servers.playwright.enable = true;
       servers.mine = { enable = true; exec = [ "/bin/my-mcp" ]; native = true; prefix = "m"; credentials.token = "/run/t"; };
       profiles.coding.servers.playwright.include = [ "browser_*" ];
     };
+    rafa.ai.tools.playwright.server.enable = true;
   };
   gw = eval {
-    rafa.ai.tools.gworkspace = { enable = true; settings.auth = { client.file = "/run/agenix/gclient"; refresh_token.command = [ "pass" "show" "g/rt" ]; }; };
-    rafa.ai.mcp = { enable = true; servers.gtasks.enable = true; servers.gdocs.enable = true; servers.gsheets.enable = true; servers.gcal.enable = true; servers.gdrive.enable = true; servers.gmail.enable = true; servers.gmeet.enable = true; };
+    rafa.ai.tools.gworkspace = {
+      settings.auth = { client.file = "/run/agenix/gclient"; refresh_token.command = [ "pass" "show" "g/rt" ]; };
+      servers = lib.genAttrs [ "gtasks" "gdocs" "gsheets" "gcal" "gdrive" "gmail" "gmeet" ] (_: { enable = true; });
+    };
+    rafa.ai.mcp.enable = true;
   };
   sl = eval {
-    rafa.ai.tools.slack = { enable = true; settings = { credentials.token.command = [ "pass" "show" "slack/token" ]; policy.rules = [ { match.self_dm = true; action = "live"; } ]; }; };
-    rafa.ai.mcp = { enable = true; servers.slack.enable = true; };
+    rafa.ai.tools.slack = { server.enable = true; settings = { credentials.token.command = [ "pass" "show" "slack/token" ]; policy.rules = [ { match.self_dm = true; action = "live"; } ]; }; };
+    rafa.ai.mcp.enable = true;
   };
-  slNoVoice = eval { rafa.ai.voice.enable = false; rafa.ai.mcp = { enable = true; servers.slack.enable = true; }; };
-  tm = eval { rafa.ai.tools.tmpmail.enable = true; rafa.ai.mcp = { enable = true; servers.tmpmail.enable = true; }; };
+  slNoVoice = eval { rafa.ai.voice.enable = false; rafa.ai.tools.slack.server.enable = true; rafa.ai.mcp.enable = true; };
+  tm = eval { rafa.ai.tools.tmpmail.server.enable = true; rafa.ai.mcp.enable = true; };
   usageOnly = eval { rafa.ai.agents.claude.usage.enable = true; };
   usageExp = eval { rafa.ai.agents.claude.usage = { enable = true; exporter = { enable = true; port = 9555; }; }; };
   cal = eval {
-    rafa.ai.tools.calibre = { enable = true; settings = { database = "/srv/books/metadata.db"; attach_roots = [ "/home/tester/share" ]; }; };
-    rafa.ai.mcp = { enable = true; servers.calibre.enable = true; };
+    rafa.ai.tools.calibre = { server.enable = true; settings = { database = "/srv/books/metadata.db"; attach_roots = [ "/home/tester/share" ]; }; };
+    rafa.ai.mcp.enable = true;
   };
   zot = eval {
-    rafa.ai.tools.zotero = { enable = true; settings = { database = "/srv/zotero/zotero.sqlite"; translation_server = "http://127.0.0.1:1969"; }; };
-    rafa.ai.mcp = { enable = true; servers.zotero.enable = true; };
+    rafa.ai.tools.zotero = { server.enable = true; settings = { database = "/srv/zotero/zotero.sqlite"; translation_server = "http://127.0.0.1:1969"; }; };
+    rafa.ai.mcp.enable = true;
   };
   units = c: c.systemd.user;
   dropin = c: builtins.fromJSON c.xdg.configFile."rafa/mcp.d/10-nix.yaml".text;
@@ -144,8 +150,18 @@ let
     "tools are opt-in, one by one" =
       has tools packages.openspec && has tools packages.likec4 && !(has tools packages.plannotator);
     "agents do not pull in tools" = !(has claude packages.plannotator) && !(has hermes packages.openspec);
-    "mcp: nothing without mcp.enable" =
-      !(has mcpOff packages.mcp) && (units mcpOff).services == { } && !(mcpOff.xdg.configFile ? "rafa/mcp.d/10-nix.yaml");
+    "cli only: tools.<x>.enable installs the CLI and creates no unit" =
+      has cliOnly packages.slack && has cliOnly packages.gworkspace && has cliOnly packages.tmpmail && has cliOnly packages.playwright-mcp
+      && (units cliOnly).services == { } && (units cliOnly).sockets == { };
+    "server.enable installs the CLI too" = has sl packages.slack && has tm packages.tmpmail && has mcp packages.playwright-mcp;
+    "server without mcp.enable: its own socket and service, no proxy, no mcp binary, no drop-in" =
+      lib.attrNames (units serverOnly).sockets == [ "mcp-playwright" ] && lib.attrNames (units serverOnly).services == [ "mcp-playwright" ]
+      && !(has serverOnly packages.mcp) && !(serverOnly.xdg.configFile ? "rafa/mcp.d/10-nix.yaml");
+    "server: listen.socket defaults to the proxy pool, named after the server" =
+      (units sl).sockets.mcp-slack.Socket.ListenStream == "%t/rafa/mcp/servers/slack.sock";
+    "server: listen.socket is overridable" =
+      (units slCustom).sockets.mcp-slack.Socket.ListenStream == "%t/custom/slack.sock";
+    "gworkspace: the CLI switch alone starts no server" = !((units (eval { rafa.ai.tools.gworkspace.enable = true; })).services ? mcp-gtasks);
     "mcp: installs the binary and the proxy in the target" =
       has mcp packages.mcp && (units mcp).services ? mcp-proxy && (units mcp).targets ? rafa-mcp;
     "mcp: one socket and one service per enabled server, none for presets left off" =

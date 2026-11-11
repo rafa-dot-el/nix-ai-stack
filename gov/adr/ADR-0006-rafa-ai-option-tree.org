@@ -12,13 +12,17 @@
 The flake exposes =services.hermes-agent= (NixOS) and re-exports upstream's Home Manager module. the author's NixOS configuration repository wires the other AI packages by hand into package lists, and MCP daemons through per-project HM modules under an =mcp.*= namespace.
 
 * Decision
-Both module systems expose =rafa.ai= with the same shape: =hardening=, =voice=, =agents.<agent>= (one root =enable= per agent; sub-components default to =mkDefault <agent>.enable=; long-running services such as the Claude usage exporter or the Hermes server never default on), =tools= (generic tools usable by any agent), =mcp= (proxy, profiles, servers) and, on NixOS, =runtimes= (ollama). =services.hermes-agent= becomes =rafa.ai.agents.hermes.server= with a =mkRenamedOptionModule= alias.
+Both module systems expose =rafa.ai= with the same shape: =hardening=, =voice=, =agents.<agent>= (one root =enable= per agent; sub-components default to =mkDefault <agent>.enable=; long-running services such as the Claude usage exporter or the Hermes server never default on), =tools= (generic tools usable by any agent), =mcp= (proxy, profiles, custom servers) and, on NixOS, =runtimes= (ollama). =services.hermes-agent= becomes =rafa.ai.agents.hermes.server= with a =mkRenamedOptionModule= alias.
+
+Installing a tool and running it as a service are two switches. =tools.<x>.enable= installs the CLI and never creates a unit. =tools.<x>.server.enable= runs the same tool as an MCP server (its own socket unit and service, =listen.socket= defaulting to the pool the proxy watches) and installs the CLI too. =mcp= keeps only the shared infrastructure (binary, proxy, profiles) and custom servers; a shipped server is never enabled under =mcp.servers=. Servers do not need =mcp.enable=: without it they have their own units and no proxy. Tools with several servers (=gworkspace=) use =servers.<name>=.
 
 * Change
 #+begin_src nix
 rafa.ai.agents.claude = { enable = true; };   # => code + acp + desktop + usage (CLI); exporter stays off
 rafa.ai.agents.goose.enable = true;           # => cli + desktop
-rafa.ai.mcp.servers.slack.enable = true;      # => mcp-slack.socket + mcp-slack.service
+rafa.ai.tools.slack.enable = true;            # => the slack CLI, no unit
+rafa.ai.tools.slack.server.enable = true;     # => mcp-slack.socket + mcp-slack.service (and the CLI)
+rafa.ai.tools.slack.server.listen.socket = "%t/rafa/mcp/servers/slack.sock";   # the default
 #+end_src
 
 * Alternatives

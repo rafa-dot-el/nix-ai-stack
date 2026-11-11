@@ -11,6 +11,8 @@ let
 in
 rec {
   poolDir = "%t/rafa/mcp/servers";
+  # The proxy discovers every *.sock in the pool; a server listens there unless told otherwise.
+  poolSocket = name: "${poolDir}/${name}.sock";
   target = "rafa-mcp.target";
 
   # One systemd command line from an argv list: each word double-quoted, `\` and `"`
@@ -37,7 +39,7 @@ rec {
       PartOf = [ target ];
     };
     Socket = {
-      ListenStream = "${poolDir}/${name}.sock";
+      ListenStream = server.listen.socket;
       SocketMode = "0600";
       DirectoryMode = "0700";
       Accept = false;

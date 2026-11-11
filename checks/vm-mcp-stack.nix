@@ -34,10 +34,10 @@ testers.runNixOSTest {
     home-manager.users.alice = {
       imports = [ homeModule ];
       home.stateVersion = "26.05";
+      rafa.ai.tools.playwright.server.enable = true;
+      rafa.ai.tools.gworkspace.servers.gtasks.enable = true;
       rafa.ai.mcp = {
         enable = true;
-        servers.playwright.enable = true;
-        servers.gtasks.enable = true;
         profiles.web.servers.playwright.include = [ "browser_close" "browser_tabs" ];
         profiles.tasks.servers.gtasks = { };
       };

@@ -115,6 +115,13 @@ nix run github:rafa-dot-el/nix-ai-stack#claude-code
 nix run github:rafa-dot-el/nix-ai-stack#slack -- --help
 #+end_src
 
+From a checkout, =task run:<name>= builds and runs the package of /this/ flake,
+never the one on your PATH (arguments after =--=): =run:claude=,
+=run:claude-desktop=, =run:acp=, =run:goose=, =run:goose-desktop=, =run:agy=,
+=run:ollama=, =run:mcp=, =run:slack=, =run:openspec=, =run:plannotator=,
+=run:likec4=, and for Hermes =run=, =run:cli=, =run:dashboard=,
+=run:desktop=. Any other package: =task run:pkg PKG=<name> [BIN=<binary>] -- <args>=.
+
 * Services
 
 Services are separate from installs. Nothing here starts unless you enable it.

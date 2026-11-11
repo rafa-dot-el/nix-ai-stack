@@ -51,7 +51,7 @@ Manager (ADR-0006), plus =overlays.default= (=pkgs.rafa.ai.<name>=) and
 | =likec4= | architecture as code, with =likec4-mcp= |
 | =notebooklm-py= | NotebookLM CLI; =login= uses the Nix Playwright browsers and downloads nothing |
 | =patternfly-mcp=, =playwright-mcp= | stdio MCP servers, run behind =mcp sidecar= |
-| =ociImage= | =hermesFull= as an OCI image (=rafadotel/hermes-agent=) |
+| =ociImage= | =hermesFull= as an OCI image (=rafadotel/ai=) |
 
 * Quick Start
 
@@ -348,11 +348,11 @@ With the cache configured, =nixos-rebuild= or =home-manager switch= pulls pre-bu
 
 * Docker Hub
 
-=rafadotel/hermes-agent= on Docker Hub is =hermesFull= packaged as an OCI image (built via =pkgs.dockerTools.buildLayeredImage=, no Dockerfile). Currently =linux/amd64= only — =arm64= isn't wired into CI yet (see =task oci:push= below to publish one by hand from an aarch64 host).
+=rafadotel/ai= on Docker Hub is =hermesFull= packaged as an OCI image (built via =pkgs.dockerTools.buildLayeredImage=, no Dockerfile). Currently =linux/amd64= only — =arm64= isn't wired into CI yet (see =task oci:push= below to publish one by hand from an aarch64 host).
 
 #+begin_src bash :eval no
-docker pull rafadotel/hermes-agent:latest
-docker run --rm -it rafadotel/hermes-agent:latest
+docker pull rafadotel/ai:latest
+docker run --rm -it rafadotel/ai:latest
 #+end_src
 
 Tags: =latest= (tracks =main=) and a version tag per release (e.g. =2026.8.27=, matching the git tag without its leading "v").
@@ -444,7 +444,8 @@ If building locally (without Cachix), the build is resource-intensive (~30 min o
 | =task test= | every flake check, VM tests included |
 | =task rust:test=, =task rust:cov= | the Rust workspace; coverage gate 95% pure, 85% overall |
 | =task py:test= | calibrectl and zoteroctl, coverage gate 95% |
-| =task check-update= | latest upstream version of every package |
+| =task check-update= | pinned vs latest version of Hermes and every package (exit 0: an update is available) |
+| =task update= | bump Hermes (=task hermes:update=) and every package (=task update:packages=), building and testing each |
 
 Architecture decisions are in =gov/adr/=; requirements in
 =gov/requirements.org=.

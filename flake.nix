@@ -1,5 +1,5 @@
 {
-  description = "nix-ai-stack — AI agents, tools and MCP servers for NixOS/home-manager (Hermes: CLI, TUI, web dashboard, desktop, ACP)";
+  description = "nix-ai-stack — AI agents, tools and MCP servers for NixOS/home-manager (Hermes, Claude Code, goose, Antigravity, the mcp proxy and first-party servers)";
 
   # Every input follows one of two nixpkgs (ADR-0001, task check:inputs):
   # `nixpkgs` (stable) for this flake's own packages, `nixpkgs-unstable` for
@@ -7,7 +7,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
     # Pinned to the exact nixpkgs upstream Hermes locks and tests against
-    # (task update keeps them in sync): its prebuilt pm node segfaults on newer
+    # (task hermes:update keeps them in sync): its prebuilt pm node segfaults on newer
     # unstable revisions (GTD bug, hermes-tui `npm config set` exit 139).
     nixpkgs-unstable.url = "github:nixos/nixpkgs/0954f7ee2f6bb3dc7d4e3d0d8bcb8fd4bde4cfc5";
     flake-parts = {
@@ -99,7 +99,7 @@
           };
 
           ociImage = pkgs.dockerTools.buildLayeredImage {
-            name = "hermes-agent";
+            name = "ai";
             tag = "latest";
             contents = [ hermesFull ];
             config.Entrypoint = [ "${hermesFull}/bin/hermes" ];

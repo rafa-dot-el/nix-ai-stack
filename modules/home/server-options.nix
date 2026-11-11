@@ -25,7 +25,7 @@ rec {
       description = ''
         Unix socket the server listens on (systemd specifiers allowed). The default is in the pool
         directory the mcp proxy watches; a socket elsewhere is not discovered by the proxy and
-        is reached directly, for example with `mcp client --unix PATH`.
+        is reached directly or registered with `mcp config add-mcp NAME --unix PATH`.
       '';
     };
     environment = mkOption { type = types.attrsOf types.str; default = { }; description = "Service environment. No secrets: use credentials."; };

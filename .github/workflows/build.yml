@@ -3,7 +3,7 @@ name: Build and publish to Cachix
 on:
   push:
     branches:
-      - main
+      - '**'
     tags:
       - 'v*'
   pull_request:

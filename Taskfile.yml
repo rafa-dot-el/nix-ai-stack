@@ -176,6 +176,92 @@ tasks:
         out="$(nix build --no-link --print-out-paths .#hermes-desktop)"
         exec "$out/bin/hermes-desktop" {{.CLI_ARGS}}
 
+  # run:<name>: build and exec a package from THIS flake (never the one on the system PATH).
+  # Arguments after `--` go to the program: task run:claude -- --version
+  run:pkg:
+    desc: "Run any package of this flake: task run:pkg PKG=<flake package> [BIN=<binary>] -- <args>"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    requires:
+      vars: [PKG]
+    cmds:
+      - |
+        set -euo pipefail
+        out="$(nix build --no-link --print-out-paths ".#{{.PKG}}")"
+        exec "$out/bin/{{.BIN | default .PKG}}" {{.CLI_ARGS}}
+
+  run:claude:
+    desc: "Run Claude Code from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: claude-code, BIN: claude, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:claude-desktop:
+    desc: "Run Claude Desktop from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: claude-desktop, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:acp:
+    desc: "Run the Claude ACP adapter from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: claude-agent-acp, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:goose:
+    desc: "Run the goose CLI from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: goose-cli, BIN: goose, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:goose-desktop:
+    desc: "Run the goose desktop app from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: goose-desktop, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:agy:
+    desc: "Run the Antigravity CLI from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: antigravity-cli, BIN: agy, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:ollama:
+    desc: "Run the ollama CLI from this flake (no service)"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: ollama, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:mcp:
+    desc: "Run the mcp binary (proxy, client, doctor) from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: mcp, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:slack:
+    desc: "Run the slack CLI from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: slack, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:openspec:
+    desc: "Run openspec from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: openspec, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:plannotator:
+    desc: "Run plannotator from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: plannotator, CLI_ARGS: "{{.CLI_ARGS}}" }
+
+  run:likec4:
+    desc: "Run likec4 from this flake"
+    cmds:
+      - task: run:pkg
+        vars: { PKG: likec4, CLI_ARGS: "{{.CLI_ARGS}}" }
+
   test:unit:
     desc: "Unit tests: repo gates (tests/unit) and the mock OpenAI backend (pure Python, no nix build, no network)"
     dir: "{{.TASKFILE_DIR}}"

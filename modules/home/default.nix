@@ -36,7 +36,7 @@ let
   };
 in
 {
-  imports = [ (import ./mcp.nix { inherit packages; }) (import ./voice.nix { inherit packages; }) ];
+  imports = [ (import ./mcp.nix { inherit packages; }) (import ./tool-servers.nix { inherit packages; }) (import ./voice.nix { inherit packages; }) ];
 
   options.rafa.ai = {
     hardening.enable = mkOption {
@@ -118,6 +118,8 @@ in
           description = "Rendered to ~/.config/rafa/gworkspace.yaml (secret refs only, never secrets). Shared by the CLIs and the MCP servers.";
         };
       };
+      playwright = tool "playwright-mcp" "playwright-mcp (browser automation MCP server)";
+      patternfly = tool "patternfly-mcp" "patternfly-mcp (PatternFly docs MCP server)";
       tmpmail = tool "tmpmail" "tmpmail (disposable GuerrillaMail inboxes)";
       zotero = tool "zoteroctl" "zoteroctl (Zotero libraries from the command line)" // {
         settings = mkOption {

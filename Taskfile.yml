@@ -194,6 +194,21 @@ tasks:
         export HERMES_OUT
         nix develop .#itest -c pytest tests/integration -v {{.CLI_ARGS}}
 
+  test:check:
+    desc: "Build only the named flake checks: task test:check -- mcp-lib home-module"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        names="{{.CLI_ARGS}}"
+        [ -n "$names" ] || { echo "[-] name at least one check, e.g. task test:check -- mcp-lib" >&2; exit 2; }
+        system="$(nix eval --raw --impure --expr builtins.currentSystem)"
+        targets=""
+        for name in $names; do targets="$targets .#checks.${system}.${name}"; done
+        nix build --no-link --print-build-logs $targets
+        echo "[+] checks passed: $names"
+
   test:
     desc: "Build every flake check for this system (checks/*.nix: pure eval and sandboxed tests)"
     dir: "{{.TASKFILE_DIR}}"

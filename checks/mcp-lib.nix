@@ -17,6 +17,7 @@ let
     describe = { };
     timeout = null;
     credentials = { };
+    listen.socket = "%t/rafa/mcp/servers/web.sock";
     restartSec = 5;
     extraServiceConfig = { };
   } // overrides;
@@ -53,6 +54,14 @@ let
     testSocketIsPrivateInThePool = {
       expr = (m.serverSocket "web" cfg.servers.web).Socket;
       expected = { ListenStream = "%t/rafa/mcp/servers/web.sock"; SocketMode = "0600"; DirectoryMode = "0700"; Accept = false; };
+    };
+    testDefaultSocketIsInThePool = {
+      expr = m.poolSocket "web";
+      expected = "%t/rafa/mcp/servers/web.sock";
+    };
+    testSocketPathIsTheServersOwnListenSocket = {
+      expr = (m.serverSocket "web" (server { listen.socket = "%t/elsewhere/web.sock"; })).Socket.ListenStream;
+      expected = "%t/elsewhere/web.sock";
     };
     testSocketJoinsTheTarget = {
       expr = let s = m.serverSocket "web" cfg.servers.web; in [ s.Unit.PartOf s.Install.WantedBy ];

@@ -5,11 +5,11 @@ let
 in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "antigravity-cli";
-  version = "1.4.12";
+  version = "1.5.5";
 
   src = fetchurl {
-    url = "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.4.12-4768735748292608/linux-x64/cli_linux_x64.tar.gz";
-    hash = "sha256-M2jRkj/IafIeyPzoMlKoyWyJKDqsk5OViskfv3o5SeQ=";
+    url = "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.5-6740358537805824/linux-x64/cli_linux_x64.tar.gz";
+    hash = "sha256-v+LCXt6t2YwpQkF8mXLuDh+qPwr9yQcR6E1fOmM7UHg=";
   };
 
   sourceRoot = ".";

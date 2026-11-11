@@ -9,7 +9,7 @@
     # Pinned to the exact nixpkgs upstream Hermes locks and tests against
     # (task hermes:update keeps them in sync): its prebuilt pm node segfaults on newer
     # unstable revisions (GTD bug, hermes-tui `npm config set` exit 139).
-    nixpkgs-unstable.url = "github:nixos/nixpkgs/0954f7ee2f6bb3dc7d4e3d0d8bcb8fd4bde4cfc5";
+    nixpkgs-unstable.url = "github:nixos/nixpkgs/02c087f3fe673c9e317f206a627cb6b910336dbe";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -29,10 +29,6 @@
       inputs.pyproject-nix.follows = "pyproject-nix";
       inputs.uv2nix.follows = "uv2nix";
     };
-    npm-lockfile-fix = {
-      url = "github:jeslie0/npm-lockfile-fix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     home-manager = {
       url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -45,13 +41,12 @@
       inputs.flake-parts.follows = "flake-parts";
     };
     hermes-agent-src = {
-      url = "github:NousResearch/hermes-agent/v0.22.5";
+      url = "github:NousResearch/hermes-agent/v0.23.1";
       inputs.nixpkgs.follows = "nixpkgs-unstable";
       inputs.flake-parts.follows = "flake-parts";
       inputs.pyproject-nix.follows = "pyproject-nix";
       inputs.uv2nix.follows = "uv2nix";
       inputs.pyproject-build-systems.follows = "pyproject-build-systems";
-      inputs.npm-lockfile-fix.follows = "npm-lockfile-fix";
       inputs.home-manager.follows = "home-manager";
     };
   };

@@ -30,7 +30,7 @@
 
 # Vendored from nixpkgs (pkgs/by-name/go/goose-desktop at 941a8e3e) and bumped with
 # packages/goose-cli: neither of this flake's channels has goose-desktop. Changes from
-# nixpkgs: pnpm_10_latest (pnpm_10 is insecure on 26.05), pnpm deps hash for 1.57.0,
+# nixpkgs: pnpm_10_latest (pnpm_10 is insecure on 26.05), pnpm deps hash (unchanged from 1.57.0 to 1.59.0),
 # the hardening environment (lib/hardening.nix).
 # nixpkgs already patches the in-app updater off (UPDATES_ENABLED = false).
 let

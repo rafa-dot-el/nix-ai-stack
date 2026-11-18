@@ -3,6 +3,7 @@ version: "3"
 silent: true
 
 # Included from the root Taskfile as pkg:notebooklm-py; builds through the root flake.
+# Source is the upstream git tag (fetchFromGitHub), not PyPI.
 vars:
   DEF: "{{.TASKFILE_DIR}}/default.nix"
   ATTR: "{{.ROOT_DIR}}#notebooklm-py"
@@ -19,12 +20,13 @@ tasks:
       - nix build "{{.ROOT_DIR}}#checks.x86_64-linux.notebooklm-py-smoke" --no-link
 
   check-update:
-    desc: "Exit 0 if PyPI has a newer version; exit 1 if current; exit 2 on errors"
+    desc: "Exit 0 if the upstream git repo has a newer v<semver> tag; exit 1 if current; exit 2 on errors"
     cmds:
       - |
         set -euo pipefail
         LOCAL="$(grep -m1 '^  version = ' "{{.DEF}}" | sed -E 's/^  version = "([^"]*)";$/\1/')"
-        REMOTE="$(curl -fsSL https://pypi.org/pypi/notebooklm-py/json | jq -r .info.version)"
+        REMOTE="$(git ls-remote --tags --refs https://github.com/teng-lin/notebooklm-py.git 'refs/tags/v*' \
+          | sed -E 's|.*refs/tags/v||' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
         if [ -z "$REMOTE" ] || [ -z "$LOCAL" ]; then
           echo "[-] check-update: could not read versions (local='$LOCAL' remote='$REMOTE')" >&2; exit 2
         fi
@@ -32,16 +34,22 @@ tasks:
         echo "[*] check-update: notebooklm-py $LOCAL -> $REMOTE"
 
   update:
-    desc: "Bump to PyPI's latest sdist: patch version and hash, build, test"
+    desc: "Bump to upstream git tag v<VERSION> (default: newest): rev, source hash, build, test"
     cmds:
       - |
         set -euo pipefail
-        V="${VERSION:-$(curl -fsSL https://pypi.org/pypi/notebooklm-py/json | jq -r .info.version)}"
+        REPO="https://github.com/teng-lin/notebooklm-py"
+        V="${VERSION:-$(git ls-remote --tags --refs "$REPO.git" 'refs/tags/v*' \
+          | sed -E 's|.*refs/tags/v||' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)}"
         [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "[-] update: unexpected version '$V'" >&2; exit 2; }
-        HEX="$(curl -fsSL "https://pypi.org/pypi/notebooklm-py/$V/json" | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256')"
-        H="$(nix hash convert --hash-algo sha256 --to sri "$HEX")"
+        REV="$(git ls-remote --tags "$REPO.git" "refs/tags/v$V^{}" | cut -f1)"
+        [ -n "$REV" ] || REV="$(git ls-remote --tags "$REPO.git" "refs/tags/v$V" | cut -f1)"
+        [[ "$REV" =~ ^[0-9a-f]{40}$ ]] || { echo "[-] update: no commit for tag v$V" >&2; exit 2; }
+        H="$(nix store prefetch-file --unpack --json "$REPO/archive/$REV.tar.gz" | jq -r .hash)"
+        [[ "$H" =~ ^sha256- ]] || { echo "[-] update: could not prefetch source for $REV" >&2; exit 2; }
         V="$V" perl -i -pe 's/^  version = "[^"]*";/  version = "$ENV{V}";/' "{{.DEF}}"
+        REV="$REV" perl -i -pe 's|^    rev = "[^"]*";|    rev = "$ENV{REV}";|' "{{.DEF}}"
         H="$H" perl -i -pe 's|^    hash = "sha256[^"]*";|    hash = "$ENV{H}";|' "{{.DEF}}"
-        echo "[+] update: notebooklm-py $V ($H)"
+        echo "[+] update: notebooklm-py v$V ($REV, $H)"
       - task: build
       - task: test

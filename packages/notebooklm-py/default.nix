@@ -1,7 +1,7 @@
 {
   lib,
   python3Packages,
-  fetchPypi,
+  fetchFromGitHub,
   playwright-driver,
   makeWrapper,
 }:
@@ -14,10 +14,12 @@ python3Packages.buildPythonApplication rec {
   version = "0.8.6";
   pyproject = true;
 
-  src = fetchPypi {
-    pname = "notebooklm_py";
-    inherit version;
-    hash = "sha256-UaUKi0y5QlFHk+zSdoIonbme/OR1jRyzC+Is9SouSSU=";
+  # Built from the upstream git tag v0.8.6 (commit pinned), not from PyPI.
+  src = fetchFromGitHub {
+    owner = "teng-lin";
+    repo = "notebooklm-py";
+    rev = "956400aa7af6b61b4cb988a24c9a081a3abc4ee8";
+    hash = "sha256-XH3VAxxSEt2xAn9MiRpTdeVa6Q5DWxH2H3JEReZF15U=";
   };
 
   build-system = with python3Packages; [ hatchling hatch-fancy-pypi-readme ];

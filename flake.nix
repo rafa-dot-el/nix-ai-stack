@@ -112,6 +112,7 @@
           # packages/: third-party AI tools, one directory each (ADR-0001).
           claude-code = pkgs.callPackage ./packages/claude-code { };
           antigravity-cli = pkgs.callPackage ./packages/antigravity-cli { };
+          antigravity-hub = pkgs.callPackage ./packages/antigravity-hub { };
           openspec = pkgs.callPackage ./packages/openspec { };
           patternfly-mcp = pkgs.callPackage ./packages/patternfly-mcp { };
           notebooklm-py = pkgs.callPackage ./packages/notebooklm-py { };
